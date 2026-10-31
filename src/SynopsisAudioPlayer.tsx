@@ -9,6 +9,13 @@ type SynopsisAudioPlayerProps = {
   onClose: () => void
 }
 
+type SpeechOverrides = {
+  rate?: number
+  pitch?: number
+  volume?: number
+  voice?: SpeechSynthesisVoice | null
+}
+
 const RATE_OPTIONS = Array.from({ length: 11 }, (_, index) => 0.5 + index * 0.25)
 const DEFAULT_WORDS_PER_SECOND = 3
 
@@ -121,7 +128,7 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
     if (reset) setCurrentChar(0)
   }
 
-  function speakFrom(charIndex: number) {
+  function speakFrom(charIndex: number, overrides: SpeechOverrides = {}) {
     if (!synth || !text.trim()) return
 
     const safeStart = Math.max(0, Math.min(charIndex, text.length - 1))
@@ -131,10 +138,11 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
 
     const utterance = new SpeechSynthesisUtterance(text.slice(safeStart))
     utterance.lang = lang
-    utterance.rate = rate
-    utterance.pitch = pitch
-    utterance.volume = volume
-    if (selectedVoice) utterance.voice = selectedVoice
+    utterance.rate = overrides.rate ?? rate
+    utterance.pitch = overrides.pitch ?? pitch
+    utterance.volume = overrides.volume ?? volume
+    const voice = overrides.voice !== undefined ? overrides.voice : selectedVoice
+    if (voice) utterance.voice = voice
 
     setCurrentChar(safeStart)
     setError('')
@@ -200,25 +208,26 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
   function changeRate(nextRate: number) {
     setRate(nextRate)
     localStorage.setItem('animefinder.tts.rate', String(nextRate))
-    if (status !== 'idle') window.setTimeout(() => speakFrom(currentChar), 0)
+    if (status !== 'idle') speakFrom(currentChar, { rate: nextRate })
   }
 
   function changeVoice(nextVoiceUri: string) {
+    const nextVoice = languageVoices.find((voice) => voice.voiceURI === nextVoiceUri) ?? null
     setVoiceUri(nextVoiceUri)
     localStorage.setItem(`animefinder.tts.voice.${lang}`, nextVoiceUri)
-    if (status !== 'idle') window.setTimeout(() => speakFrom(currentChar), 0)
+    if (status !== 'idle') speakFrom(currentChar, { voice: nextVoice })
   }
 
   function changePitch(nextPitch: number) {
     setPitch(nextPitch)
     localStorage.setItem('animefinder.tts.pitch', String(nextPitch))
-    if (status !== 'idle') window.setTimeout(() => speakFrom(currentChar), 0)
+    if (status !== 'idle') speakFrom(currentChar, { pitch: nextPitch })
   }
 
   function changeVolume(nextVolume: number) {
     setVolume(nextVolume)
     localStorage.setItem('animefinder.tts.volume', String(nextVolume))
-    if (status !== 'idle') window.setTimeout(() => speakFrom(currentChar), 0)
+    if (status !== 'idle') speakFrom(currentChar, { volume: nextVolume })
   }
 
   function closePlayer() {
