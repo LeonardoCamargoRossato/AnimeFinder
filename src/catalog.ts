@@ -1,24 +1,14 @@
 import type { Anime, WatchedAnime } from './types'
 import { isSupabaseConfigured, supabase } from './supabase'
 
-const STORAGE_KEY = 'animefinder.watched'
-
-function readLocal(): WatchedAnime[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as WatchedAnime[]
-  } catch {
-    return []
+async function requireCurrentUser() {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase is not configured for this deployment.')
   }
-}
 
-function writeLocal(rows: WatchedAnime[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(rows))
-}
-
-async function currentUserId(): Promise<string | null> {
-  if (!supabase) return null
-  const { data } = await supabase.auth.getUser()
-  return data.user?.id ?? null
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data.user) throw new Error('You must be signed in to use your AnimeFinder catalog.')
+  return data.user
 }
 
 export function watchedFromAnime(anime: Anime, originalTitle = anime.title): WatchedAnime {
@@ -36,61 +26,54 @@ export function watchedFromAnime(anime: Anime, originalTitle = anime.title): Wat
 }
 
 export async function listWatched(): Promise<WatchedAnime[]> {
-  const userId = await currentUserId()
-  if (isSupabaseConfigured && supabase && userId) {
-    const { data, error } = await supabase
-      .from('watched_anime')
-      .select('*')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-    if (!error && data) return data as WatchedAnime[]
-  }
-  return readLocal()
+  const user = await requireCurrentUser()
+  const { data, error } = await supabase!
+    .from('watched_anime')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('updated_at', { ascending: false })
+
+  if (error) throw new Error(error.message)
+  return (data ?? []) as WatchedAnime[]
 }
 
 export async function saveWatched(row: WatchedAnime): Promise<void> {
-  const now = new Date().toISOString()
-  const userId = await currentUserId()
-  if (isSupabaseConfigured && supabase && userId) {
-    const payload = { ...row, user_id: userId, updated_at: now }
-    const { error } = await supabase.from('watched_anime').upsert(payload, { onConflict: 'user_id,mal_id' })
-    if (!error) return
-    console.warn('Supabase save failed; using local catalog instead.', error.message)
-  }
+  const user = await requireCurrentUser()
+  const payload = { ...row, user_id: user.id }
+  const { error } = await supabase!
+    .from('watched_anime')
+    .upsert(payload, { onConflict: 'user_id,mal_id' })
 
-  const rows = readLocal()
-  const existingIndex = row.mal_id == null ? -1 : rows.findIndex((item) => item.mal_id === row.mal_id)
-  const record: WatchedAnime = {
-    ...row,
-    id: existingIndex >= 0 ? rows[existingIndex].id : crypto.randomUUID(),
-    created_at: existingIndex >= 0 ? rows[existingIndex].created_at : now,
-    updated_at: now,
-  }
-  if (existingIndex >= 0) rows[existingIndex] = record
-  else rows.unshift(record)
-  writeLocal(rows)
+  if (error) throw new Error(error.message)
 }
 
 export async function saveManyWatched(rows: WatchedAnime[]): Promise<void> {
-  for (const row of rows) await saveWatched(row)
+  const user = await requireCurrentUser()
+  if (!rows.length) return
+
+  const payload = rows.map((row) => ({ ...row, user_id: user.id }))
+  const { error } = await supabase!
+    .from('watched_anime')
+    .upsert(payload, { onConflict: 'user_id,mal_id' })
+
+  if (error) throw new Error(error.message)
 }
 
 export async function removeWatched(malId: number): Promise<void> {
-  const userId = await currentUserId()
-  if (isSupabaseConfigured && supabase && userId) {
-    const { error } = await supabase
-      .from('watched_anime')
-      .delete()
-      .eq('user_id', userId)
-      .eq('mal_id', malId)
-    if (!error) return
-  }
-  writeLocal(readLocal().filter((item) => item.mal_id !== malId))
+  const user = await requireCurrentUser()
+  const { error } = await supabase!
+    .from('watched_anime')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('mal_id', malId)
+
+  if (error) throw new Error(error.message)
 }
 
 export function catalogSearch(rows: WatchedAnime[], query: string): WatchedAnime[] {
   const needle = query.trim().toLocaleLowerCase()
   if (!needle) return rows
+
   return rows.filter((row) =>
     [
       row.title_original,
@@ -103,9 +86,4 @@ export function catalogSearch(rows: WatchedAnime[], query: string): WatchedAnime
       .filter(Boolean)
       .some((title) => title!.toLocaleLowerCase().includes(needle)),
   )
-}
-
-export async function getCatalogMode(): Promise<'supabase' | 'local'> {
-  const userId = await currentUserId()
-  return isSupabaseConfigured && userId ? 'supabase' : 'local'
 }
