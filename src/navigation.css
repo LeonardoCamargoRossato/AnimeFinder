@@ -1,0 +1,39 @@
+.settings-gear-host {
+  display: contents;
+}
+
+.settings-gear.active {
+  border-color: var(--accent, #8b7cf6);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #8b7cf6) 45%, transparent);
+}
+
+.settings-import-host {
+  display: block;
+}
+
+.settings-import-card {
+  margin-bottom: 20px;
+}
+
+.settings-import-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 16px;
+}
+
+.settings-import-copy p {
+  margin: 6px 0 0;
+}
+
+@media (max-width: 760px) {
+  .settings-import-copy {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-import-copy .primary-button {
+    width: 100%;
+  }
+}
