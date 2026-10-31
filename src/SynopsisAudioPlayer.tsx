@@ -40,6 +40,15 @@ function languageName(lang: string) {
   return known[lang] ?? lang
 }
 
+function currentWordIndex(starts: number[], currentChar: number) {
+  let index = 0
+  for (let cursor = 0; cursor < starts.length; cursor += 1) {
+    if (starts[cursor] > currentChar) break
+    index = cursor
+  }
+  return index
+}
+
 export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose }: SynopsisAudioPlayerProps) {
   const supported = typeof window !== 'undefined' && 'speechSynthesis' in window
   const synth = supported ? window.speechSynthesis : null
@@ -53,7 +62,6 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
   const [volume, setVolume] = useState(() => Number(localStorage.getItem('animefinder.tts.volume') || 1))
   const [voiceUri, setVoiceUri] = useState('')
   const generationRef = useRef(0)
-  const startCharRef = useRef(0)
 
   const starts = useMemo(() => wordStarts(text), [text])
   const languageVoices = useMemo(() => {
@@ -128,7 +136,6 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
     utterance.volume = volume
     if (selectedVoice) utterance.voice = selectedVoice
 
-    startCharRef.current = safeStart
     setCurrentChar(safeStart)
     setError('')
 
@@ -182,7 +189,7 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
 
   function seekSeconds(seconds: number) {
     if (!starts.length) return
-    const currentWord = Math.max(0, starts.findLastIndex((start) => start <= currentChar))
+    const currentWord = currentWordIndex(starts, currentChar)
     const wordsToMove = Math.max(1, Math.round(Math.abs(seconds) * DEFAULT_WORDS_PER_SECOND * rate))
     const targetWord = seconds < 0
       ? Math.max(0, currentWord - wordsToMove)
@@ -193,17 +200,13 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
   function changeRate(nextRate: number) {
     setRate(nextRate)
     localStorage.setItem('animefinder.tts.rate', String(nextRate))
-    if (status !== 'idle') {
-      window.setTimeout(() => speakFrom(currentChar), 0)
-    }
+    if (status !== 'idle') window.setTimeout(() => speakFrom(currentChar), 0)
   }
 
   function changeVoice(nextVoiceUri: string) {
     setVoiceUri(nextVoiceUri)
     localStorage.setItem(`animefinder.tts.voice.${lang}`, nextVoiceUri)
-    if (status !== 'idle') {
-      window.setTimeout(() => speakFrom(currentChar), 0)
-    }
+    if (status !== 'idle') window.setTimeout(() => speakFrom(currentChar), 0)
   }
 
   function changePitch(nextPitch: number) {
