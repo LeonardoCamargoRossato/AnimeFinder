@@ -18,7 +18,7 @@ security invoker
 set search_path = ''
 as $$
   select auth.uid() is not null
-    and lower(coalesce(auth.jwt() ->> 'email', '')) = 'leo.se.rosato@gmail.com';
+    and lower(coalesce(auth.jwt() ->> 'email', '')) = 'leo.c.rossato@gmail.com';
 $$;
 
 grant execute on function animefinder.is_authorized_user() to authenticated;
