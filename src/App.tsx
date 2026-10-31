@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import type { Session, User } from '@supabase/supabase-js'
+import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { animeProvider } from './providers'
 import {
   animeMatchesFilters,
@@ -11,48 +12,250 @@ import {
 } from './types'
 import {
   catalogSearch,
-  getCatalogMode,
   listWatched,
   removeWatched,
   saveManyWatched,
   saveWatched,
   watchedFromAnime,
 } from './catalog'
-import { isSupabaseConfigured, supabase } from './supabase'
+import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from './supabase'
+
+const AUTHORIZED_EMAIL = 'leo.se.rosato@gmail.com'
+
+function isAuthorized(user: User | null | undefined) {
+  return user?.email?.toLowerCase() === AUTHORIZED_EMAIL
+}
 
 function App() {
   const [dark, setDark] = useState(() => localStorage.getItem('animefinder.theme') !== 'light')
+  const [session, setSession] = useState<Session | null>(null)
+  const [authReady, setAuthReady] = useState(!supabase)
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
     localStorage.setItem('animefinder.theme', dark ? 'dark' : 'light')
   }, [dark])
 
+  useEffect(() => {
+    if (!supabase) return
+
+    let mounted = true
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return
+      setSession(data.session)
+      setAuthReady(true)
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return
+      setSession(nextSession)
+      setAuthReady(true)
+    })
+
+    return () => {
+      mounted = false
+      listener.subscription.unsubscribe()
+    }
+  }, [])
+
+  return (
+    <Routes>
+      <Route path="/" element={<PublicHome session={session} authReady={authReady} dark={dark} setDark={setDark} />} />
+      <Route path="/login" element={<LoginPage session={session} authReady={authReady} dark={dark} setDark={setDark} />} />
+      <Route
+        path="/app/*"
+        element={
+          <ProtectedApp session={session} authReady={authReady} dark={dark} setDark={setDark} />
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+
+function PublicHome({ session, authReady, dark, setDark }: { session: Session | null; authReady: boolean; dark: boolean; setDark: (value: boolean) => void }) {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (authReady && isAuthorized(session?.user)) navigate('/app', { replace: true })
+  }, [authReady, session, navigate])
+
+  return (
+    <div className="public-shell">
+      <PublicHeader dark={dark} setDark={setDark} />
+      <main className="public-main">
+        <section className="landing-hero">
+          <div className="landing-copy">
+            <span className="eyebrow">PERSONAL ANIME DISCOVERY</span>
+            <h1>Find, filter and remember every anime worth watching.</h1>
+            <p>
+              AnimeFinder searches the MyAnimeList ecosystem through Jikan, combines precise discovery filters,
+              and keeps your watched catalog synchronized securely with Supabase.
+            </p>
+            <div className="landing-actions">
+              <button className="primary-button landing-cta" onClick={() => navigate('/login')}>Enter AnimeFinder</button>
+              <span>Private personal application</span>
+            </div>
+          </div>
+          <div className="landing-visual" aria-hidden="true">
+            <div className="visual-card visual-card-a"><span>★ 9.1</span><strong>Discover</strong><small>Search across titles</small></div>
+            <div className="visual-card visual-card-b"><span>24 ep</span><strong>Filter</strong><small>Score · genre · year</small></div>
+            <div className="visual-card visual-card-c"><span>✓</span><strong>Watched</strong><small>Synced with Supabase</small></div>
+            <div className="visual-orbit" />
+          </div>
+        </section>
+        <section className="landing-features">
+          <article><span>01</span><h3>Search naturally</h3><p>Find anime using English, romaji, Japanese and known title variants.</p></article>
+          <article><span>02</span><h3>Refine precisely</h3><p>Narrow results by score, episodes, genre, year, type, status and watched state.</p></article>
+          <article><span>03</span><h3>Keep your catalog</h3><p>Your personal watched list persists through Supabase and follows your authenticated account.</p></article>
+        </section>
+      </main>
+      <footer className="footer">AnimeFinder · Discovery powered by MyAnimeList data via Jikan</footer>
+    </div>
+  )
+}
+
+function LoginPage({ session, authReady, dark, setDark }: { session: Session | null; authReady: boolean; dark: boolean; setDark: (value: boolean) => void }) {
+  const navigate = useNavigate()
+  const [error, setError] = useState('')
+  const user = session?.user ?? null
+
+  useEffect(() => {
+    if (authReady && isAuthorized(user)) navigate('/app', { replace: true })
+  }, [authReady, user, navigate])
+
+  async function continueWithGoogle() {
+    if (!supabase) {
+      setError('Supabase is not configured for this deployment.')
+      return
+    }
+
+    setError('')
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: getAuthRedirectUrl(),
+      },
+    })
+    if (authError) setError(authError.message)
+  }
+
+  if (!authReady) return <AuthLoading />
+  if (user && !isAuthorized(user)) return <AccessDenied user={user} dark={dark} setDark={setDark} />
+
+  return (
+    <div className="public-shell auth-page">
+      <PublicHeader dark={dark} setDark={setDark} />
+      <main className="auth-main">
+        <section className="auth-card">
+          <span className="brand-mark auth-brand">AF</span>
+          <span className="eyebrow">PRIVATE ACCESS</span>
+          <h1>Enter AnimeFinder</h1>
+          <p>Continue with the Google account authorized for this private catalog.</p>
+          <button className="google-button" onClick={continueWithGoogle} disabled={!isSupabaseConfigured}>
+            <span className="google-g">G</span>
+            Continue with Google
+          </button>
+          {!isSupabaseConfigured && <div className="notice error">Supabase environment variables are missing.</div>}
+          {error && <div className="notice error">{error}</div>}
+          <button className="text-button" onClick={() => navigate('/')}>← Back to AnimeFinder</button>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+function PublicHeader({ dark, setDark }: { dark: boolean; setDark: (value: boolean) => void }) {
+  return (
+    <header className="topbar public-topbar">
+      <NavLink to="/" className="brand" aria-label="AnimeFinder home">
+        <span className="brand-mark">AF</span>
+        <span>AnimeFinder</span>
+      </NavLink>
+      <div />
+      <button className="icon-button" onClick={() => setDark(!dark)} title="Toggle theme">{dark ? '☀' : '☾'}</button>
+    </header>
+  )
+}
+
+function AuthLoading() {
+  return <div className="auth-loading"><span className="brand-mark">AF</span><p>Restoring secure session…</p></div>
+}
+
+function AccessDenied({ user, dark, setDark }: { user: User; dark: boolean; setDark: (value: boolean) => void }) {
+  const navigate = useNavigate()
+
+  async function logout() {
+    await supabase?.auth.signOut()
+    navigate('/', { replace: true })
+  }
+
+  return (
+    <div className="public-shell auth-page">
+      <PublicHeader dark={dark} setDark={setDark} />
+      <main className="auth-main">
+        <section className="auth-card access-denied">
+          <div className="denied-icon">×</div>
+          <span className="eyebrow">ACCESS DENIED</span>
+          <h1>Unauthorized account</h1>
+          <p>AnimeFinder is currently a private application. The signed-in account is not authorized.</p>
+          <div className="signed-account">{user.email}</div>
+          <button className="primary-button" onClick={logout}>Logout</button>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+function ProtectedApp({ session, authReady, dark, setDark }: { session: Session | null; authReady: boolean; dark: boolean; setDark: (value: boolean) => void }) {
+  if (!authReady) return <AuthLoading />
+  if (!session?.user) return <Navigate to="/login" replace />
+  if (!isAuthorized(session.user)) return <AccessDenied user={session.user} dark={dark} setDark={setDark} />
+  return <PrivateApp user={session.user} dark={dark} setDark={setDark} />
+}
+
+function PrivateApp({ user, dark, setDark }: { user: User; dark: boolean; setDark: (value: boolean) => void }) {
+  const navigate = useNavigate()
+  const metadata = user.user_metadata ?? {}
+  const displayName = metadata.full_name || metadata.name || user.email?.split('@')[0] || 'Leonardo'
+  const avatar = metadata.avatar_url || metadata.picture
+
+  async function logout() {
+    await supabase?.auth.signOut()
+    navigate('/', { replace: true })
+  }
+
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <NavLink to="/" className="brand" aria-label="AnimeFinder home">
+      <header className="topbar private-topbar">
+        <NavLink to="/app" className="brand" aria-label="AnimeFinder discover">
           <span className="brand-mark">AF</span>
           <span>AnimeFinder</span>
         </NavLink>
         <nav className="main-nav">
-          <NavLink to="/">Discover</NavLink>
-          <NavLink to="/my-anime">My Anime</NavLink>
-          <NavLink to="/import">Import</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
+          <NavLink end to="/app">Discover</NavLink>
+          <NavLink to="/app/my-anime">My Anime</NavLink>
+          <NavLink to="/app/import">Import</NavLink>
+          <NavLink to="/app/settings">Settings</NavLink>
         </nav>
-        <button className="icon-button" onClick={() => setDark((value) => !value)} title="Toggle theme">
-          {dark ? '☀' : '☾'}
-        </button>
+        <div className="user-tools">
+          <button className="icon-button" onClick={() => setDark(!dark)} title="Toggle theme">{dark ? '☀' : '☾'}</button>
+          <div className="user-menu">
+            {avatar ? <img src={avatar} alt="Google profile" referrerPolicy="no-referrer" /> : <span className="user-avatar-fallback">{displayName.slice(0, 1).toUpperCase()}</span>}
+            <div className="user-copy"><strong>{displayName}</strong><small>{user.email}</small></div>
+            <button className="logout-button" onClick={logout}>Logout</button>
+          </div>
+        </div>
       </header>
 
       <main>
         <Routes>
-          <Route path="/" element={<Discover />} />
-          <Route path="/my-anime" element={<MyAnime />} />
-          <Route path="/import" element={<ImportPage />} />
-          <Route path="/anime/:id" element={<AnimeDetails />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route index element={<Discover />} />
+          <Route path="my-anime" element={<MyAnime />} />
+          <Route path="import" element={<ImportPage />} />
+          <Route path="anime/:id" element={<AnimeDetails />} />
+          <Route path="settings" element={<Settings user={user} />} />
+          <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </main>
 
@@ -81,22 +284,13 @@ function Discover() {
         setGenres(genreList)
         setWatched(watchedRows)
       })
-      .catch(() => live && setError('Could not load anime data right now. Please try again.'))
+      .catch((reason) => live && setError(reason instanceof Error ? reason.message : 'Could not load anime data right now.'))
       .finally(() => live && setLoading(false))
-    return () => {
-      live = false
-    }
+    return () => { live = false }
   }, [])
 
-  const watchedIds = useMemo(
-    () => new Set(watched.map((row) => row.mal_id).filter((id): id is number => id != null)),
-    [watched],
-  )
-
-  const visible = useMemo(
-    () => results.filter((anime) => animeMatchesFilters(anime, filters, watchedIds)),
-    [results, filters, watchedIds],
-  )
+  const watchedIds = useMemo(() => new Set(watched.map((row) => row.mal_id).filter((id): id is number => id != null)), [watched])
+  const visible = useMemo(() => results.filter((anime) => animeMatchesFilters(anime, filters, watchedIds)), [results, filters, watchedIds])
 
   async function handleSearch(event: FormEvent) {
     event.preventDefault()
@@ -112,9 +306,13 @@ function Discover() {
   }
 
   async function toggleWatched(anime: Anime) {
-    if (watchedIds.has(anime.malId)) await removeWatched(anime.malId)
-    else await saveWatched(watchedFromAnime(anime))
-    await refreshWatched()
+    try {
+      if (watchedIds.has(anime.malId)) await removeWatched(anime.malId)
+      else await saveWatched(watchedFromAnime(anime))
+      await refreshWatched()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not update your catalog.')
+    }
   }
 
   const chips = buildFilterChips(filters)
@@ -127,22 +325,14 @@ function Discover() {
         <p>Search across titles, narrow the catalog with precise filters, and keep watched series out of the way.</p>
         <form className="search-bar" onSubmit={handleSearch}>
           <span className="search-icon">⌕</span>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Attack on Titan, Shingeki no Kyojin, 進撃の巨人…"
-            aria-label="Search anime"
-          />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Attack on Titan, Shingeki no Kyojin, 進撃の巨人…" aria-label="Search anime" />
           <button className="primary-button" type="submit">Search</button>
         </form>
       </section>
 
       <section className="filters-panel">
         <div className="section-heading compact">
-          <div>
-            <span className="eyebrow">REFINE RESULTS</span>
-            <h2>Filters</h2>
-          </div>
+          <div><span className="eyebrow">REFINE RESULTS</span><h2>Filters</h2></div>
           <button className="text-button" onClick={() => setFilters({})}>Clear all</button>
         </div>
         <div className="filter-grid">
@@ -150,31 +340,21 @@ function Discover() {
           <FilterNumber label="Max score" value={filters.score_max} min={0} max={10} step={0.1} onChange={(value) => setFilters({ ...filters, score_max: value })} />
           <FilterNumber label="Min episodes" value={filters.episodes_min} min={1} onChange={(value) => setFilters({ ...filters, episodes_min: value })} />
           <FilterNumber label="Max episodes" value={filters.episodes_max} min={1} onChange={(value) => setFilters({ ...filters, episodes_max: value })} />
-          <label className="field"><span>Genre</span><select value="" onChange={(event) => {
-            const value = event.target.value
-            if (value && !filters.genres?.includes(value)) setFilters({ ...filters, genres: [...(filters.genres ?? []), value] })
-          }}><option value="">Add genre…</option>{genres.map((genre) => <option key={genre.id} value={genre.name}>{genre.name}</option>)}</select></label>
+          <label className="field"><span>Genre</span><select value="" onChange={(event) => { const value = event.target.value; if (value && !filters.genres?.includes(value)) setFilters({ ...filters, genres: [...(filters.genres ?? []), value] }) }}><option value="">Add genre…</option>{genres.map((genre) => <option key={genre.id} value={genre.name}>{genre.name}</option>)}</select></label>
           <FilterNumber label="Year" value={filters.year} min={1900} max={2100} onChange={(value) => setFilters({ ...filters, year: value })} />
           <label className="field"><span>Type</span><select value={filters.type ?? ''} onChange={(event) => setFilters({ ...filters, type: event.target.value || undefined })}><option value="">Any type</option><option>TV</option><option>Movie</option><option>OVA</option><option>ONA</option><option>Special</option><option>Music</option></select></label>
           <label className="field"><span>Status</span><select value={filters.status ?? ''} onChange={(event) => setFilters({ ...filters, status: event.target.value || undefined })}><option value="">Any status</option><option>Currently Airing</option><option>Finished Airing</option><option>Not yet aired</option></select></label>
         </div>
         <div className="filter-bottom-row">
           <label className="toggle-row"><input type="checkbox" checked={filters.watched === false} onChange={(event) => setFilters({ ...filters, watched: event.target.checked ? false : undefined })} /><span>Hide watched anime</span></label>
-          <div className="chip-row">
-            {chips.map((chip) => <button key={chip.key} className="chip" onClick={() => setFilters(removeFilter(filters, chip.key))}>{chip.label} <b>×</b></button>)}
-          </div>
+          <div className="chip-row">{chips.map((chip) => <button key={chip.key} className="chip" onClick={() => setFilters(removeFilter(filters, chip.key))}>{chip.label} <b>×</b></button>)}</div>
         </div>
       </section>
 
       <section className="results-section">
-        <div className="section-heading">
-          <div><span className="eyebrow">DISCOVER</span><h2>{query.trim() ? `Results for “${query.trim()}”` : 'Popular anime'}</h2></div>
-          <span className="result-count">{visible.length} shown</span>
-        </div>
+        <div className="section-heading"><div><span className="eyebrow">DISCOVER</span><h2>{query.trim() ? `Results for “${query.trim()}”` : 'Popular anime'}</h2></div><span className="result-count">{visible.length} shown</span></div>
         {error && <div className="notice error">{error}</div>}
-        {loading ? <LoadingGrid /> : visible.length ? (
-          <div className="anime-grid">{visible.map((anime) => <AnimeCard key={anime.malId} anime={anime} watched={watchedIds.has(anime.malId)} onToggleWatched={() => toggleWatched(anime)} />)}</div>
-        ) : <EmptyState title="No anime match these filters" text="Remove one or more filters, or try another title." />}
+        {loading ? <LoadingGrid /> : visible.length ? <div className="anime-grid">{visible.map((anime) => <AnimeCard key={anime.malId} anime={anime} watched={watchedIds.has(anime.malId)} onToggleWatched={() => toggleWatched(anime)} />)}</div> : <EmptyState title="No anime match these filters" text="Remove one or more filters, or try another title." />}
       </section>
     </div>
   )
@@ -189,13 +369,13 @@ function AnimeCard({ anime, watched, onToggleWatched }: { anime: Anime; watched:
   const altTitle = anime.titleEnglish && anime.titleEnglish !== anime.title ? anime.titleEnglish : anime.titleJapanese
   return (
     <article className="anime-card">
-      <button className="poster-button" onClick={() => navigate(`/anime/${anime.malId}`)} aria-label={`Open ${anime.title}`}>
+      <button className="poster-button" onClick={() => navigate(`/app/anime/${anime.malId}`)} aria-label={`Open ${anime.title}`}>
         {anime.imageUrl ? <img src={anime.imageUrl} alt={anime.title} loading="lazy" /> : <div className="poster-placeholder">No image</div>}
         <span className="score-badge">★ {anime.score?.toFixed(1) ?? '—'}</span>
       </button>
       <div className="anime-card-body">
         <div className="card-meta"><span>{anime.type ?? 'Anime'}</span><span>{anime.year ?? '—'}</span><span>{anime.episodes ? `${anime.episodes} ep` : 'Episodes —'}</span></div>
-        <button className="title-button" onClick={() => navigate(`/anime/${anime.malId}`)}>{anime.title}</button>
+        <button className="title-button" onClick={() => navigate(`/app/anime/${anime.malId}`)}>{anime.title}</button>
         {altTitle && <div className="alt-title">{altTitle}</div>}
         <div className="genre-row">{anime.genres.slice(0, 3).map((genre) => <span key={genre.id}>{genre.name}</span>)}</div>
         <div className="card-footer"><span className={`status-dot ${anime.status === 'Currently Airing' ? 'live' : ''}`}>{anime.status ?? 'Unknown'}</span><button className={watched ? 'watched-button active' : 'watched-button'} onClick={onToggleWatched}>{watched ? '✓ Watched' : '+ Watched'}</button></div>
@@ -208,10 +388,12 @@ function MyAnime() {
   const [rows, setRows] = useState<WatchedAnime[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const refresh = async () => {
-    setRows(await listWatched())
-    setLoading(false)
+    try { setRows(await listWatched()) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load your catalog.') }
+    finally { setLoading(false) }
   }
   useEffect(() => { void refresh() }, [])
   const visible = catalogSearch(rows, query)
@@ -220,6 +402,7 @@ function MyAnime() {
     <div className="page narrow-page">
       <PageIntro eyebrow="PERSONAL CATALOG" title="My Anime" text="Everything you have marked as watched, searchable across every stored title variant." />
       <div className="catalog-toolbar"><input className="standalone-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your catalog in any language…" /><span>{visible.length} anime</span></div>
+      {error && <div className="notice error">{error}</div>}
       {loading ? <div className="notice">Loading your catalog…</div> : visible.length ? <div className="catalog-list">{visible.map((row) => (
         <article className="catalog-item" key={`${row.id}-${row.mal_id}`}>
           <div className="catalog-index">{row.mal_id ?? '—'}</div>
@@ -227,7 +410,7 @@ function MyAnime() {
           <span className="match-pill">{row.match_status.replace('_', ' ')}</span>
           {row.mal_id && <button className="ghost-button" onClick={async () => { await removeWatched(row.mal_id!); await refresh() }}>Remove</button>}
         </article>
-      ))}</div> : <EmptyState title="Your catalog is empty" text="Mark anime as watched from Discover, or import your existing list." action="Import a list" href="/import" />}
+      ))}</div> : <EmptyState title="Your catalog is empty" text="Mark anime as watched from Discover, or import your existing list." action="Import a list" href="/app/import" />}
     </div>
   )
 }
@@ -269,8 +452,12 @@ function ImportPage() {
 
   async function saveConfirmed() {
     const confirmed = candidates.filter((row) => row.status === 'manually_confirmed' && row.match)
-    await saveManyWatched(confirmed.map((row) => watchedFromAnime(row.match!, row.originalTitle)))
-    setMessage(`${confirmed.length} confirmed anime saved to your catalog.`)
+    try {
+      await saveManyWatched(confirmed.map((row) => watchedFromAnime(row.match!, row.originalTitle)))
+      setMessage(`${confirmed.length} confirmed anime saved to your Supabase catalog.`)
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : 'Could not save the confirmed anime.')
+    }
   }
 
   return (
@@ -301,11 +488,8 @@ function AnimeDetails() {
     const malId = Number(id)
     if (!Number.isFinite(malId)) return
     Promise.all([animeProvider.getAnime(malId), listWatched()])
-      .then(([item, rows]) => {
-        setAnime(item)
-        setWatched(rows.some((row) => row.mal_id === malId))
-      })
-      .catch(() => setError('Could not load this anime.'))
+      .then(([item, rows]) => { setAnime(item); setWatched(rows.some((row) => row.mal_id === malId)) })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load this anime.'))
   }, [id])
 
   if (error) return <div className="page narrow-page"><div className="notice error">{error}</div></div>
@@ -324,7 +508,7 @@ function AnimeDetails() {
           <div className="detail-stats"><div><b>★ {anime.score?.toFixed(1) ?? '—'}</b><span>Score</span></div><div><b>{anime.episodes ?? '—'}</b><span>Episodes</span></div><div><b>{anime.type ?? '—'}</b><span>Type</span></div><div><b>{anime.year ?? '—'}</b><span>Year</span></div></div>
           <div className="genre-row large">{anime.genres.map((genre) => <span key={genre.id}>{genre.name}</span>)}</div>
           <p className="synopsis">{anime.synopsis || 'No synopsis available.'}</p>
-          <div className="details-actions"><button className={watched ? 'primary-button watched-primary' : 'primary-button'} onClick={async () => { if (watched) await removeWatched(anime.malId); else await saveWatched(watchedFromAnime(anime)); setWatched(!watched) }}>{watched ? '✓ Watched' : '+ Mark as watched'}</button>{anime.url && <a className="ghost-button link-button" href={anime.url} target="_blank" rel="noreferrer">Open on MyAnimeList ↗</a>}</div>
+          <div className="details-actions"><button className={watched ? 'primary-button watched-primary' : 'primary-button'} onClick={async () => { try { if (watched) await removeWatched(anime.malId); else await saveWatched(watchedFromAnime(anime)); setWatched(!watched) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update your catalog.') } }}>{watched ? '✓ Watched' : '+ Mark as watched'}</button>{anime.url && <a className="ghost-button link-button" href={anime.url} target="_blank" rel="noreferrer">Open on MyAnimeList ↗</a>}</div>
         </div>
       </section>
       <section className="title-variants"><div className="section-heading compact"><div><span className="eyebrow">IDENTIFICATION</span><h2>Known title variants</h2></div></div><div className="variant-grid">{anime.titles.map((title, index) => <div key={`${title.type}-${index}`}><span>{title.type}</span><strong>{title.title}</strong></div>)}</div></section>
@@ -332,29 +516,12 @@ function AnimeDetails() {
   )
 }
 
-function Settings() {
-  const [mode, setMode] = useState<'supabase' | 'local'>('local')
-  const [email, setEmail] = useState('')
-  const [authMessage, setAuthMessage] = useState('')
-
-  useEffect(() => { void getCatalogMode().then(setMode) }, [])
-
-  async function sendMagicLink(event: FormEvent) {
-    event.preventDefault()
-    if (!supabase || !email) return
-    const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}#/settings`
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } })
-    setAuthMessage(error ? error.message : 'Check your email for the secure sign-in link.')
-  }
-
+function Settings({ user }: { user: User }) {
   return (
     <div className="page narrow-page">
-      <PageIntro eyebrow="CONFIGURATION" title="Settings" text="Manage the data sources and storage services that power AnimeFinder." />
+      <PageIntro eyebrow="CONFIGURATION" title="Settings" text="Review the services and authenticated account that power AnimeFinder." />
       <section className="settings-card"><div><span className="eyebrow">ANIME DATA SOURCES</span><h2>Providers</h2></div><div className="provider-row"><div className="provider-logo">MAL</div><div><strong>MyAnimeList / Jikan</strong><p>Search, details, genres, seasons and rankings.</p></div><span className="active-pill">● Active</span></div><div className="coming-soon">More data sources coming later.</div></section>
-      <section className="settings-card"><div><span className="eyebrow">PERSONAL CATALOG</span><h2>Storage</h2></div><div className="provider-row"><div className="provider-logo">DB</div><div><strong>{mode === 'supabase' ? 'Supabase connected' : 'Browser storage'}</strong><p>{mode === 'supabase' ? 'Your watched catalog is synchronized with your authenticated Supabase account.' : 'Your catalog is currently stored only in this browser. Supabase can be enabled without changing the app.'}</p></div><span className={mode === 'supabase' ? 'active-pill' : 'local-pill'}>{mode === 'supabase' ? '● Connected' : 'Local mode'}</span></div>
-        {!isSupabaseConfigured && <div className="notice">Supabase environment variables have not been configured for this deployment yet.</div>}
-        {isSupabaseConfigured && mode === 'local' && <form className="auth-form" onSubmit={sendMagicLink}><p>Sign in to synchronize your catalog securely.</p><div className="inline-form"><input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Your Supabase account email" /><button className="primary-button">Send sign-in link</button></div>{authMessage && <small>{authMessage}</small>}</form>}
-      </section>
+      <section className="settings-card"><div><span className="eyebrow">AUTHENTICATION & STORAGE</span><h2>Supabase</h2></div><div className="provider-row"><div className="provider-logo">DB</div><div><strong>Connected and persistent</strong><p>Google identity is handled by Supabase Auth. Your watched catalog is stored in the dedicated <code>animefinder</code> schema.</p></div><span className="active-pill">● Connected</span></div><div className="session-summary"><span>Signed in as</span><strong>{user.email}</strong><small>RLS independently restricts the catalog to this authorized account.</small></div></section>
     </div>
   )
 }
