@@ -1,55 +1,84 @@
 # AnimeFinder
 
-AnimeFinder is a personal anime discovery and catalog application built with React, TypeScript and Vite. It searches MyAnimeList data through Jikan, supports reusable filters, tracks watched anime and provides a review-first import workflow for existing title lists.
+AnimeFinder is a private personal anime discovery and catalog application built with React, TypeScript and Vite. It searches MyAnimeList data through Jikan, supports reusable filters, tracks watched anime and provides a review-first import workflow for existing title lists.
+
+Production:
+
+`https://leonardocamargorossato.github.io/AnimeFinder/`
 
 ## Features
 
+- Public AnimeFinder landing page
+- Google OAuth through Supabase Auth
+- Private application access restricted to the authorized account
 - Search anime by known titles through Jikan
 - Filter by score, episodes, genre, year, type, status and watched state
-- Persistent personal watched catalog
+- Persistent watched catalog in Supabase
 - Anime details with known title variants
 - Review-first list import with manual match confirmation
 - Light and dark themes
 - Responsive GitHub Pages deployment
 - Provider abstraction ready for future anime data sources
-- Supabase-ready catalog storage with secure Row Level Security
 
 ## Architecture
 
-The UI depends on the `AnimeProvider` interface rather than Jikan directly. `JikanProvider` is the current implementation. Future providers can implement the same interface and be selected without rebuilding the frontend.
+Anime discovery metadata:
 
-Personal catalog access is isolated in `src/catalog.ts`. If Supabase is not configured or the user is not authenticated, AnimeFinder uses browser `localStorage`. Once Supabase is configured and the user signs in, the same application flow uses the `watched_anime` table.
+`Jikan / MyAnimeList → AnimeProvider → AnimeFinder UI`
+
+Authentication and personal persistence:
+
+`Google → Supabase Auth → AnimeFinder authorization → animefinder.watched_anime`
+
+The UI depends on the `AnimeProvider` interface rather than Jikan directly. `JikanProvider` is the current implementation. Future providers can implement the same interface without rebuilding the application screens.
+
+Personal catalog access is isolated in `src/catalog.ts`. Supabase is the authoritative watched-anime database. Browser storage is used only for non-sensitive UI preferences such as the light/dark theme.
+
+The PostgreSQL data lives under the dedicated `animefinder` schema rather than `public`.
 
 ## Local development
+
+Create `.env.local`:
+
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
+```
+
+Then run:
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Supabase setup
+## Supabase and Google OAuth setup
 
-1. Create a Supabase project.
-2. Open the SQL Editor and run `supabase/schema.sql`.
-3. In Authentication, keep email sign-in enabled.
-4. Add the GitHub Pages URL to the allowed redirect URLs:
-   `https://leonardocamargorossato.github.io/AnimeFinder/`
-5. In this GitHub repository, open **Settings → Secrets and variables → Actions**.
-6. Add repository secrets:
+1. Run `supabase/schema.sql` in Supabase SQL Editor.
+2. Add `animefinder` to the Data API exposed schemas.
+3. Enable Google in Supabase Auth.
+4. Configure the Google OAuth client and Supabase redirect URLs.
+5. Add these GitHub Actions repository secrets:
    - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-7. Re-run the Pages workflow or push a new commit.
-8. Open AnimeFinder → Settings and sign in with the email account you want to own the catalog.
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+6. Push to `main` or re-run the Pages workflow.
 
-Do not use a Supabase service-role key in the frontend or GitHub Pages build.
+Detailed setup instructions:
+
+`docs/SUPABASE_GOOGLE_OAUTH.md`
+
+Never commit a Supabase service-role key, Google Client Secret or OAuth secret to this repository.
+
+## Security
+
+The frontend checks the signed-in email for routing and UX, but it is not the security boundary. The `animefinder.watched_anime` RLS policies independently require both:
+
+- the authenticated Supabase `user_id`
+- the authorized email claim
 
 ## Deployment
 
 Pushes to `main` trigger `.github/workflows/deploy.yml`, which builds the Vite application and deploys `dist/` to GitHub Pages.
-
-Public site:
-
-`https://leonardocamargorossato.github.io/AnimeFinder/`
 
 ## Data source
 
