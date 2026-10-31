@@ -1,0 +1,120 @@
+.audio-rate-stepper {
+  display: grid;
+  grid-template-columns: 34px minmax(76px, 92px) 34px;
+  gap: 5px;
+  align-items: center;
+}
+
+.audio-rate-stepper.compact {
+  grid-template-columns: 32px 68px 32px;
+}
+
+.audio-rate-stepper > button {
+  display: grid;
+  width: 34px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.audio-rate-stepper.compact > button {
+  width: 32px;
+}
+
+.audio-rate-stepper > button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--accent-2);
+}
+
+.audio-rate-stepper > button:disabled {
+  cursor: not-allowed;
+  opacity: .38;
+}
+
+.audio-rate-input-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.audio-rate-input-wrap input {
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 24px 0 9px;
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 780;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-rate-input-wrap input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.audio-rate-input-wrap span {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--muted);
+  font-size: .7rem;
+  font-weight: 800;
+}
+
+.audio-setting-field > small {
+  color: var(--muted);
+  font-size: .63rem;
+  line-height: 1.4;
+}
+
+.audio-setting-field .audio-rate-stepper {
+  width: 100%;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+}
+
+.audio-setting-field .audio-rate-stepper > button {
+  width: 38px;
+}
+
+@media (max-width: 760px) {
+  .audio-rate-control {
+    align-items: center;
+  }
+
+  .audio-rate-control .audio-rate-stepper {
+    flex: 1;
+  }
+}
+
+@media (max-width: 460px) {
+  .audio-rate-control {
+    flex-wrap: wrap;
+  }
+
+  .audio-rate-control > span {
+    width: 100%;
+  }
+
+  .audio-rate-stepper.compact {
+    width: 100%;
+    grid-template-columns: 38px minmax(0, 1fr) 38px;
+  }
+
+  .audio-rate-stepper.compact > button {
+    width: 38px;
+  }
+}
