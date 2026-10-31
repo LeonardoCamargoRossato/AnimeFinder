@@ -77,7 +77,7 @@ create index if not exists watched_anime_mal_idx
   on animefinder.watched_anime(mal_id);
 
 create index if not exists watched_anime_search_trgm_idx
-  on animefinder.watched_anime using gin(search_text extensions.gin_trgm_ops);
+  on animefinder.watched_anime using gin(search_text gin_trgm_ops);
 
 alter table animefinder.watched_anime enable row level security;
 
