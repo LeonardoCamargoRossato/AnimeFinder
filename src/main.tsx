@@ -7,6 +7,7 @@ import { handleSupabaseAuthCallback } from './authCallback'
 import './styles.css'
 import './auth.css'
 import './synopsis.css'
+import './synopsis-rate.css'
 
 async function bootstrap() {
   await handleSupabaseAuthCallback()
