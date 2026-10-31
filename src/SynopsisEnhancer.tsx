@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
+import SynopsisAudioPlayer from './SynopsisAudioPlayer'
 import { loadSynopsisBundle, type SynopsisBundle } from './synopsis'
+
+function detectOriginalSpeechLanguage(text: string) {
+  if (/[ぁ-ゟ゠-ヿ]/u.test(text)) return 'ja-JP'
+  if (/\p{Script=Han}/u.test(text)) return 'zh-CN'
+  return 'en-US'
+}
 
 export default function SynopsisEnhancer() {
   const location = useLocation()
@@ -11,9 +18,11 @@ export default function SynopsisEnhancer() {
   const [bundle, setBundle] = useState<SynopsisBundle | null>(null)
   const [loading, setLoading] = useState(false)
   const [showOriginal, setShowOriginal] = useState(false)
+  const [audioOpen, setAudioOpen] = useState(false)
 
   useEffect(() => {
     setHost(null)
+    setAudioOpen(false)
     if (!malId) return
 
     let mountedHost: HTMLDivElement | null = null
@@ -57,6 +66,7 @@ export default function SynopsisEnhancer() {
   useEffect(() => {
     setBundle(null)
     setShowOriginal(false)
+    setAudioOpen(false)
     if (!malId) return
 
     let active = true
@@ -85,19 +95,37 @@ export default function SynopsisEnhancer() {
   const visibleText = showOriginal
     ? bundle?.original
     : bundle?.portuguese || bundle?.original
+  const isPortugueseView = !showOriginal && hasPortuguese
+  const speechLang = visibleText
+    ? (isPortugueseView ? 'pt-BR' : detectOriginalSpeechLanguage(visibleText))
+    : 'pt-BR'
+  const speechLanguageLabel = isPortugueseView
+    ? 'Português (Brasil)'
+    : speechLang === 'ja-JP'
+      ? 'Japonês'
+      : speechLang === 'zh-CN'
+        ? 'Chinês'
+        : 'Inglês'
 
   return createPortal(
     <section className="synopsis-panel" aria-live="polite">
       <div className="synopsis-panel-header">
         <div>
           <span className="eyebrow">SINOPSE</span>
-          <h3>{showOriginal ? 'Original' : 'Português'}</h3>
+          <h3>{showOriginal ? 'Original' : hasPortuguese ? 'Português' : 'Original'}</h3>
         </div>
-        {hasOriginal && hasPortuguese && (
-          <button className="synopsis-language-button" onClick={() => setShowOriginal((value) => !value)}>
-            {showOriginal ? 'Ver em português' : 'Ver original'}
-          </button>
-        )}
+        <div className="synopsis-header-actions">
+          {hasOriginal && hasPortuguese && (
+            <button className="synopsis-language-button" onClick={() => setShowOriginal((value) => !value)}>
+              {showOriginal ? 'Ver em português' : 'Ver original'}
+            </button>
+          )}
+          {!loading && visibleText && (
+            <button className="synopsis-listen-button" onClick={() => setAudioOpen(true)}>
+              <span aria-hidden="true">🔊</span> Escutar
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -110,6 +138,16 @@ export default function SynopsisEnhancer() {
         <p className="synopsis synopsis-enhanced">{visibleText}</p>
       ) : (
         <p className="synopsis synopsis-enhanced">Sinopse indisponível nas fontes consultadas.</p>
+      )}
+
+      {audioOpen && visibleText && (
+        <SynopsisAudioPlayer
+          key={`${malId}-${showOriginal ? 'original' : 'portuguese'}-${speechLang}`}
+          text={visibleText}
+          lang={speechLang}
+          languageLabel={speechLanguageLabel}
+          onClose={() => setAudioOpen(false)}
+        />
       )}
 
       {!loading && bundle?.source && (
