@@ -5,6 +5,12 @@ export interface AnimeTitle {
   title: string
 }
 
+export interface NamedAnimeEntity {
+  id: number
+  name: string
+  url?: string | null
+}
+
 export interface Anime {
   malId: number
   title: string
@@ -23,6 +29,69 @@ export interface Anime {
   url?: string | null
   airedFrom?: string | null
   airedTo?: string | null
+  source?: string | null
+  studios?: NamedAnimeEntity[]
+  producers?: NamedAnimeEntity[]
+  licensors?: NamedAnimeEntity[]
+  rank?: number | null
+  popularity?: number | null
+  members?: number | null
+  favorites?: number | null
+  rating?: string | null
+  duration?: string | null
+  season?: string | null
+}
+
+export interface AnimeRelationEntry {
+  malId: number
+  type: string
+  name: string
+  url?: string | null
+  mediaType?: string | null
+  imageUrl?: string | null
+  largeImageUrl?: string | null
+}
+
+export interface AnimeRelation {
+  relation: string
+  entries: AnimeRelationEntry[]
+}
+
+export interface AnimeStaffCredit {
+  person: {
+    malId: number
+    name: string
+    url?: string | null
+    imageUrl?: string | null
+  }
+  positions: string[]
+}
+
+export interface AnimeVoiceActorCredit {
+  person: {
+    malId: number
+    name: string
+    url?: string | null
+    imageUrl?: string | null
+  }
+  language: string
+}
+
+export interface AnimeCharacterCredit {
+  character: {
+    malId: number
+    name: string
+    url?: string | null
+    imageUrl?: string | null
+  }
+  role?: string | null
+  favorites?: number | null
+  voiceActors: AnimeVoiceActorCredit[]
+}
+
+export interface AnimeStreamingLink {
+  name: string
+  url: string
 }
 
 export interface Genre {
