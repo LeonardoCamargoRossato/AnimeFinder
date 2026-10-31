@@ -16,12 +16,28 @@ type SpeechOverrides = {
   voice?: SpeechSynthesisVoice | null
 }
 
-const RATE_OPTIONS = Array.from({ length: 11 }, (_, index) => 0.5 + index * 0.25)
+const RATE_PRESETS = [0.5, 1, 1.5, 2, 2.5, 3]
+const MIN_RATE = 0.5
+const MAX_RATE = 3
+const RATE_STEP = 0.1
 const DEFAULT_WORDS_PER_SECOND = 3
+
+function clampRate(value: number) {
+  if (!Number.isFinite(value)) return 1
+  return Math.min(MAX_RATE, Math.max(MIN_RATE, Math.round(value * 100) / 100))
+}
 
 function formatRate(rate: number) {
   const decimals = Number.isInteger(rate) ? 0 : 2
   return `${rate.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: 2 })}×`
+}
+
+function formatRateInput(rate: number) {
+  return String(Math.round(rate * 100) / 100)
+}
+
+function parseRateInput(value: string) {
+  return Number(value.trim().replace(',', '.'))
 }
 
 function formatTime(seconds: number) {
@@ -64,7 +80,8 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
   const [currentChar, setCurrentChar] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [error, setError] = useState('')
-  const [rate, setRate] = useState(() => Number(localStorage.getItem('animefinder.tts.rate') || 1))
+  const [rate, setRate] = useState(() => clampRate(Number(localStorage.getItem('animefinder.tts.rate') || 1)))
+  const [rateDraft, setRateDraft] = useState(() => formatRateInput(clampRate(Number(localStorage.getItem('animefinder.tts.rate') || 1))))
   const [pitch, setPitch] = useState(() => Number(localStorage.getItem('animefinder.tts.pitch') || 1))
   const [volume, setVolume] = useState(() => Number(localStorage.getItem('animefinder.tts.volume') || 1))
   const [voiceUri, setVoiceUri] = useState('')
@@ -206,9 +223,24 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
   }
 
   function changeRate(nextRate: number) {
-    setRate(nextRate)
-    localStorage.setItem('animefinder.tts.rate', String(nextRate))
-    if (status !== 'idle') speakFrom(currentChar, { rate: nextRate })
+    const safeRate = clampRate(nextRate)
+    setRate(safeRate)
+    setRateDraft(formatRateInput(safeRate))
+    localStorage.setItem('animefinder.tts.rate', String(safeRate))
+    if (status !== 'idle') speakFrom(currentChar, { rate: safeRate })
+  }
+
+  function commitRateDraft() {
+    const parsed = parseRateInput(rateDraft)
+    if (!Number.isFinite(parsed)) {
+      setRateDraft(formatRateInput(rate))
+      return
+    }
+    changeRate(parsed)
+  }
+
+  function stepRate(delta: number) {
+    changeRate(Math.round((rate + delta) * 10) / 10)
   }
 
   function changeVoice(nextVoiceUri: string) {
@@ -234,6 +266,44 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
     stop(true)
     onClose()
   }
+
+  const rateStepper = (compact = false) => (
+    <div className={compact ? 'audio-rate-stepper compact' : 'audio-rate-stepper'}>
+      <button
+        type="button"
+        onClick={() => stepRate(-RATE_STEP)}
+        disabled={rate <= MIN_RATE}
+        aria-label="Diminuir velocidade em 0,1"
+      >−</button>
+      <div className="audio-rate-input-wrap">
+        <input
+          type="text"
+          inputMode="decimal"
+          list="animefinder-rate-presets"
+          value={rateDraft}
+          onChange={(event) => setRateDraft(event.target.value)}
+          onBlur={commitRateDraft}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              commitRateDraft()
+              event.currentTarget.blur()
+            }
+          }}
+          aria-label="Velocidade da narração"
+        />
+        <span>×</span>
+      </div>
+      <button
+        type="button"
+        onClick={() => stepRate(RATE_STEP)}
+        disabled={rate >= MAX_RATE}
+        aria-label="Aumentar velocidade em 0,1"
+      >+</button>
+      <datalist id="animefinder-rate-presets">
+        {RATE_PRESETS.map((preset) => <option key={preset} value={preset}>{formatRate(preset)}</option>)}
+      </datalist>
+    </div>
+  )
 
   if (!supported) {
     return (
@@ -279,12 +349,10 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
         </button>
         <button className="audio-seek-button" onClick={() => seekSeconds(10)} aria-label="Avançar aproximadamente 10 segundos"><span>10s</span> ↷</button>
 
-        <label className="audio-rate-control">
+        <div className="audio-rate-control">
           <span>Velocidade</span>
-          <select value={rate} onChange={(event) => changeRate(Number(event.target.value))}>
-            {RATE_OPTIONS.map((option) => <option key={option} value={option}>{formatRate(option)}</option>)}
-          </select>
-        </label>
+          {rateStepper(true)}
+        </div>
 
         <div className="audio-settings-wrap">
           <button
@@ -318,12 +386,11 @@ export default function SynopsisAudioPlayer({ text, lang, languageLabel, onClose
                 </select>
               </label>
 
-              <label className="audio-setting-field">
+              <div className="audio-setting-field">
                 <span>Velocidade</span>
-                <select value={rate} onChange={(event) => changeRate(Number(event.target.value))}>
-                  {RATE_OPTIONS.map((option) => <option key={option} value={option}>{formatRate(option)}</option>)}
-                </select>
-              </label>
+                {rateStepper()}
+                <small>Digite um valor entre 0,5× e 3× ou use −/+ em passos de 0,1.</small>
+              </div>
 
               <label className="audio-setting-slider">
                 <span><b>Tom da voz</b><strong>{pitch.toFixed(1)}</strong></span>
