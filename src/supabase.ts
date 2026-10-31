@@ -13,11 +13,12 @@ export const supabase = isSupabaseConfigured
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: 'pkce',
-        // AnimeFinder and LCR Portfolio share the same GitHub Pages origin and
-        // Supabase project. Keep their browser sessions isolated.
         storageKey: 'animefinder.supabase.auth',
+        experimental: {
+          appendPkceFlowIdToRedirects: true,
+        },
       },
     })
   : null
