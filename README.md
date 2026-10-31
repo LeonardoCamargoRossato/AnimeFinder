@@ -1,10 +1,10 @@
 # AnimeFinder
 
+## 🌐 Live Site
+
+👉 **[Open AnimeFinder](https://leonardocamargorossato.github.io/AnimeFinder/)**
+
 AnimeFinder is a private personal anime discovery and catalog application built with React, TypeScript and Vite. It searches MyAnimeList data through Jikan, supports reusable filters, tracks watched anime and provides a review-first import workflow for existing title lists.
-
-Production:
-
-`https://leonardocamargorossato.github.io/AnimeFinder/`
 
 ## Features
 
