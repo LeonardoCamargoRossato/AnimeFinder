@@ -26,6 +26,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Configure authorized AnimeFinder account
+        run: sed -i "s/leo\.se\.rosato@gmail\.com/leo.c.rossato@gmail.com/g" src/App.tsx
       - name: Build
         run: npm run build
         env:
