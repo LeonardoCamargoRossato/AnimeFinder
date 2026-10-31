@@ -1,9 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
-import { animeProvider } from './providers'
+import { animeProvider, type AnimePage } from './providers'
 import {
-  animeMatchesFilters,
   type Anime,
   type AnimeFilterState,
   type Genre,
@@ -20,7 +19,8 @@ import {
 } from './catalog'
 import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from './supabase'
 
-const AUTHORIZED_EMAIL = 'leo.se.rosato@gmail.com'
+const AUTHORIZED_EMAIL = 'leo.c.rossato@gmail.com'
+const DISCOVER_PAGE_SIZE = 12
 
 function isAuthorized(user: User | null | undefined) {
   return user?.email?.toLowerCase() === AUTHORIZED_EMAIL
@@ -89,7 +89,7 @@ function PublicHome({ session, authReady, dark, setDark }: { session: Session | 
             <span className="eyebrow">PERSONAL ANIME DISCOVERY</span>
             <h1>Find, filter and remember every anime worth watching.</h1>
             <p>
-              AnimeFinder searches the MyAnimeList ecosystem through Jikan, combines precise discovery filters,
+              AnimeFinder searches the MyAnimeList ecosystem through a compatible catalog provider, combines precise discovery filters,
               and keeps your watched catalog synchronized securely with Supabase.
             </p>
             <div className="landing-actions">
@@ -110,7 +110,7 @@ function PublicHome({ session, authReady, dark, setDark }: { session: Session | 
           <article><span>03</span><h3>Keep your catalog</h3><p>Your personal watched list persists through Supabase and follows your authenticated account.</p></article>
         </section>
       </main>
-      <footer className="footer">AnimeFinder · Discovery powered by MyAnimeList data via Jikan</footer>
+      <footer className="footer">AnimeFinder · Discovery powered by the MyAnimeList catalogue</footer>
     </div>
   )
 }
@@ -259,14 +259,16 @@ function PrivateApp({ user, dark, setDark }: { user: User; dark: boolean; setDar
         </Routes>
       </main>
 
-      <footer className="footer">AnimeFinder · Discovery powered by MyAnimeList data via Jikan</footer>
+      <footer className="footer">AnimeFinder · Discovery powered by the MyAnimeList catalogue</footer>
     </div>
   )
 }
 
 function Discover() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<Anime[]>([])
+  const [submittedQuery, setSubmittedQuery] = useState('')
+  const [catalog, setCatalog] = useState<AnimePage | null>(null)
+  const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<AnimeFilterState>({ watched: false })
   const [genres, setGenres] = useState<Genre[]>([])
   const [watched, setWatched] = useState<WatchedAnime[]>([])
@@ -277,32 +279,80 @@ function Discover() {
 
   useEffect(() => {
     let live = true
-    Promise.all([animeProvider.getTopAnime(), animeProvider.getGenres(), listWatched()])
-      .then(([anime, genreList, watchedRows]) => {
+    Promise.all([animeProvider.getGenres(), listWatched()])
+      .then(([genreList, watchedRows]) => {
         if (!live) return
-        setResults(anime)
         setGenres(genreList)
         setWatched(watchedRows)
       })
-      .catch((reason) => live && setError(reason instanceof Error ? reason.message : 'Could not load anime data right now.'))
-      .finally(() => live && setLoading(false))
+      .catch((reason) => live && setError(reason instanceof Error ? reason.message : 'Could not initialize AnimeFinder.'))
     return () => { live = false }
   }, [])
 
-  const watchedIds = useMemo(() => new Set(watched.map((row) => row.mal_id).filter((id): id is number => id != null)), [watched])
-  const visible = useMemo(() => results.filter((anime) => animeMatchesFilters(anime, filters, watchedIds)), [results, filters, watchedIds])
-
-  async function handleSearch(event: FormEvent) {
-    event.preventDefault()
+  useEffect(() => {
+    let live = true
     setLoading(true)
     setError('')
-    try {
-      setResults(query.trim() ? await animeProvider.searchAnime(query.trim()) : await animeProvider.getTopAnime())
-    } catch {
-      setError('Search failed. Jikan may be temporarily rate-limited; try again in a moment.')
-    } finally {
-      setLoading(false)
-    }
+
+    void animeProvider.browseAnime({
+      query: submittedQuery || undefined,
+      page,
+      limit: DISCOVER_PAGE_SIZE,
+      filters,
+    })
+      .then((nextPage) => {
+        if (!live) return
+        setCatalog(nextPage)
+      })
+      .catch((reason) => {
+        if (!live) return
+        setError(reason instanceof Error ? reason.message : 'Could not load the anime catalog right now.')
+      })
+      .finally(() => live && setLoading(false))
+
+    return () => { live = false }
+  }, [
+    submittedQuery,
+    page,
+    filters.score_min,
+    filters.score_max,
+    filters.episodes_min,
+    filters.episodes_max,
+    filters.year,
+    filters.type,
+    filters.status,
+    filters.watched,
+    filters.genres?.join('|'),
+  ])
+
+  const watchedIds = useMemo(
+    () => new Set(watched.map((row) => row.mal_id).filter((id): id is number => id != null)),
+    [watched],
+  )
+
+  const providerItems = catalog?.items ?? []
+  const visible = useMemo(() => providerItems.filter((anime) => {
+    if (filters.watched === false && watchedIds.has(anime.malId)) return false
+    if (filters.watched === true && !watchedIds.has(anime.malId)) return false
+    return true
+  }), [providerItems, filters.watched, watchedIds])
+
+  function applyFilters(next: AnimeFilterState) {
+    setFilters(next)
+    setPage(1)
+  }
+
+  function handleSearch(event: FormEvent) {
+    event.preventDefault()
+    setSubmittedQuery(query.trim())
+    setPage(1)
+  }
+
+  function goToPage(nextPage: number) {
+    if (nextPage < 1) return
+    if (nextPage > page && !catalog?.hasNextPage) return
+    setPage(nextPage)
+    window.setTimeout(() => document.querySelector('.results-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
   async function toggleWatched(anime: Anime) {
@@ -316,13 +366,20 @@ function Discover() {
   }
 
   const chips = buildFilterChips(filters)
+  const start = catalog && catalog.items.length ? (catalog.page - 1) * catalog.perPage + 1 : 0
+  const end = catalog && catalog.items.length ? start + catalog.items.length - 1 : 0
+  const rangeLabel = loading
+    ? 'Loading…'
+    : start
+      ? `Showing ${start}–${end}${catalog?.total != null ? ` of ${catalog.total}` : ''}${visible.length !== providerItems.length ? ` · ${visible.length} visible` : ''}`
+      : 'No results in this batch'
 
   return (
     <div className="page discover-page">
       <section className="hero">
         <div className="eyebrow">ANIME DISCOVERY ENGINE</div>
         <h1>Find your next anime</h1>
-        <p>Search across titles, narrow the catalog with precise filters, and keep watched series out of the way.</p>
+        <p>Browse the full provider catalog in small pages, refine it server-side, and keep watched series out of the way.</p>
         <form className="search-bar" onSubmit={handleSearch}>
           <span className="search-icon">⌕</span>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Attack on Titan, Shingeki no Kyojin, 進撃の巨人…" aria-label="Search anime" />
@@ -332,29 +389,44 @@ function Discover() {
 
       <section className="filters-panel">
         <div className="section-heading compact">
-          <div><span className="eyebrow">REFINE RESULTS</span><h2>Filters</h2></div>
-          <button className="text-button" onClick={() => setFilters({})}>Clear all</button>
+          <div><span className="eyebrow">REFINE FULL CATALOG</span><h2>Filters</h2></div>
+          <button className="text-button" onClick={() => applyFilters({})}>Clear all</button>
         </div>
         <div className="filter-grid">
-          <FilterNumber label="Min score" value={filters.score_min} min={0} max={10} step={0.1} onChange={(value) => setFilters({ ...filters, score_min: value })} />
-          <FilterNumber label="Max score" value={filters.score_max} min={0} max={10} step={0.1} onChange={(value) => setFilters({ ...filters, score_max: value })} />
-          <FilterNumber label="Min episodes" value={filters.episodes_min} min={1} onChange={(value) => setFilters({ ...filters, episodes_min: value })} />
-          <FilterNumber label="Max episodes" value={filters.episodes_max} min={1} onChange={(value) => setFilters({ ...filters, episodes_max: value })} />
-          <label className="field"><span>Genre</span><select value="" onChange={(event) => { const value = event.target.value; if (value && !filters.genres?.includes(value)) setFilters({ ...filters, genres: [...(filters.genres ?? []), value] }) }}><option value="">Add genre…</option>{genres.map((genre) => <option key={genre.id} value={genre.name}>{genre.name}</option>)}</select></label>
-          <FilterNumber label="Year" value={filters.year} min={1900} max={2100} onChange={(value) => setFilters({ ...filters, year: value })} />
-          <label className="field"><span>Type</span><select value={filters.type ?? ''} onChange={(event) => setFilters({ ...filters, type: event.target.value || undefined })}><option value="">Any type</option><option>TV</option><option>Movie</option><option>OVA</option><option>ONA</option><option>Special</option><option>Music</option></select></label>
-          <label className="field"><span>Status</span><select value={filters.status ?? ''} onChange={(event) => setFilters({ ...filters, status: event.target.value || undefined })}><option value="">Any status</option><option>Currently Airing</option><option>Finished Airing</option><option>Not yet aired</option></select></label>
+          <FilterNumber label="Min score" value={filters.score_min} min={0} max={10} step={0.1} onChange={(value) => applyFilters({ ...filters, score_min: value })} />
+          <FilterNumber label="Max score" value={filters.score_max} min={0} max={10} step={0.1} onChange={(value) => applyFilters({ ...filters, score_max: value })} />
+          <FilterNumber label="Min episodes" value={filters.episodes_min} min={1} onChange={(value) => applyFilters({ ...filters, episodes_min: value })} />
+          <FilterNumber label="Max episodes" value={filters.episodes_max} min={1} onChange={(value) => applyFilters({ ...filters, episodes_max: value })} />
+          <label className="field"><span>Genre</span><select value="" onChange={(event) => { const value = event.target.value; if (value && !filters.genres?.includes(value)) applyFilters({ ...filters, genres: [...(filters.genres ?? []), value] }) }}><option value="">Add genre…</option>{genres.map((genre) => <option key={genre.id} value={genre.name}>{genre.name}</option>)}</select></label>
+          <FilterNumber label="Year" value={filters.year} min={1900} max={2100} onChange={(value) => applyFilters({ ...filters, year: value })} />
+          <label className="field"><span>Type</span><select value={filters.type ?? ''} onChange={(event) => applyFilters({ ...filters, type: event.target.value || undefined })}><option value="">Any type</option><option>TV</option><option>Movie</option><option>OVA</option><option>ONA</option><option>Special</option><option>Music</option></select></label>
+          <label className="field"><span>Status</span><select value={filters.status ?? ''} onChange={(event) => applyFilters({ ...filters, status: event.target.value || undefined })}><option value="">Any status</option><option>Currently Airing</option><option>Finished Airing</option><option>Not yet aired</option></select></label>
         </div>
         <div className="filter-bottom-row">
-          <label className="toggle-row"><input type="checkbox" checked={filters.watched === false} onChange={(event) => setFilters({ ...filters, watched: event.target.checked ? false : undefined })} /><span>Hide watched anime</span></label>
-          <div className="chip-row">{chips.map((chip) => <button key={chip.key} className="chip" onClick={() => setFilters(removeFilter(filters, chip.key))}>{chip.label} <b>×</b></button>)}</div>
+          <label className="toggle-row"><input type="checkbox" checked={filters.watched === false} onChange={(event) => applyFilters({ ...filters, watched: event.target.checked ? false : undefined })} /><span>Hide watched anime</span></label>
+          <div className="chip-row">{chips.map((chip) => <button key={chip.key} className="chip" onClick={() => applyFilters(removeFilter(filters, chip.key))}>{chip.label} <b>×</b></button>)}</div>
         </div>
       </section>
 
       <section className="results-section">
-        <div className="section-heading"><div><span className="eyebrow">DISCOVER</span><h2>{query.trim() ? `Results for “${query.trim()}”` : 'Popular anime'}</h2></div><span className="result-count">{visible.length} shown</span></div>
+        <div className="section-heading">
+          <div><span className="eyebrow">DISCOVER</span><h2>{submittedQuery ? `Results for “${submittedQuery}”` : 'Full anime catalog'}</h2></div>
+          <span className="result-count">{rangeLabel}</span>
+        </div>
         {error && <div className="notice error">{error}</div>}
-        {loading ? <LoadingGrid /> : visible.length ? <div className="anime-grid">{visible.map((anime) => <AnimeCard key={anime.malId} anime={anime} watched={watchedIds.has(anime.malId)} onToggleWatched={() => toggleWatched(anime)} />)}</div> : <EmptyState title="No anime match these filters" text="Remove one or more filters, or try another title." />}
+        {loading ? <LoadingGrid /> : visible.length ? (
+          <div className="anime-grid">{visible.map((anime) => <AnimeCard key={anime.malId} anime={anime} watched={watchedIds.has(anime.malId)} onToggleWatched={() => toggleWatched(anime)} />)}</div>
+        ) : providerItems.length ? (
+          <EmptyState title="No visible anime in this batch" text="The current provider page is hidden by your watched filter. Use Previous or Next to keep browsing the catalog." />
+        ) : (
+          <EmptyState title="No anime match this catalog query" text="Remove one or more filters, or try another title." />
+        )}
+
+        <div className="filter-bottom-row" style={{ justifyContent: 'space-between', marginTop: 24 }}>
+          <button className="ghost-button" disabled={page <= 1 || loading} onClick={() => goToPage(page - 1)}>← Previous</button>
+          <span className="result-count">Page {catalog?.page ?? page}{catalog?.lastPage ? ` of ${catalog.lastPage}` : ''}</span>
+          <button className="primary-button" disabled={!catalog?.hasNextPage || loading} onClick={() => goToPage(page + 1)}>Next →</button>
+        </div>
       </section>
     </div>
   )
@@ -520,7 +592,7 @@ function Settings({ user }: { user: User }) {
   return (
     <div className="page narrow-page">
       <PageIntro eyebrow="CONFIGURATION" title="Settings" text="Review the services and authenticated account that power AnimeFinder." />
-      <section className="settings-card"><div><span className="eyebrow">ANIME DATA SOURCES</span><h2>Providers</h2></div><div className="provider-row"><div className="provider-logo">MAL</div><div><strong>MyAnimeList / Jikan</strong><p>Search, details, genres, seasons and rankings.</p></div><span className="active-pill">● Active</span></div><div className="coming-soon">More data sources coming later.</div></section>
+      <section className="settings-card"><div><span className="eyebrow">ANIME DATA SOURCES</span><h2>Providers</h2></div><div className="provider-row"><div className="provider-logo">MAL</div><div><strong>MyAnimeList catalogue / Tenrai</strong><p>Full-catalog search, provider-side filters, details, genres, seasons and rankings.</p></div><span className="active-pill">● Active</span></div><div className="coming-soon">Provider abstraction remains ready for additional data sources.</div></section>
       <section className="settings-card"><div><span className="eyebrow">AUTHENTICATION & STORAGE</span><h2>Supabase</h2></div><div className="provider-row"><div className="provider-logo">DB</div><div><strong>Connected and persistent</strong><p>Google identity is handled by Supabase Auth. Your watched catalog is stored in the dedicated <code>animefinder</code> schema.</p></div><span className="active-pill">● Connected</span></div><div className="session-summary"><span>Signed in as</span><strong>{user.email}</strong><small>RLS independently restricts the catalog to this authorized account.</small></div></section>
     </div>
   )
@@ -536,7 +608,7 @@ function EmptyState({ title, text, action, href }: { title: string; text: string
 }
 
 function LoadingGrid() {
-  return <div className="anime-grid">{Array.from({ length: 8 }).map((_, index) => <div className="anime-card skeleton-card" key={index}><div className="skeleton poster-skeleton" /><div className="anime-card-body"><div className="skeleton line wide" /><div className="skeleton line" /><div className="skeleton line small" /></div></div>)}</div>
+  return <div className="anime-grid">{Array.from({ length: DISCOVER_PAGE_SIZE }).map((_, index) => <div className="anime-card skeleton-card" key={index}><div className="skeleton poster-skeleton" /><div className="anime-card-body"><div className="skeleton line wide" /><div className="skeleton line" /><div className="skeleton line small" /></div></div>)}</div>
 }
 
 function buildFilterChips(filters: AnimeFilterState) {
