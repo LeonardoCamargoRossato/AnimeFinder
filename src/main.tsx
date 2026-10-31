@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
+import AnimeDetailsV2Enhancer from './AnimeDetailsV2Enhancer'
 import NavigationEnhancer from './NavigationEnhancer'
 import PersonalCatalogEnhancer from './PersonalCatalogEnhancer'
 import SynopsisEnhancer from './SynopsisEnhancer'
@@ -24,6 +25,7 @@ async function bootstrap() {
         <NavigationEnhancer />
         <PersonalCatalogEnhancer />
         <SynopsisEnhancer />
+        <AnimeDetailsV2Enhancer />
         <WishlistEnhancer />
         <App />
       </HashRouter>
