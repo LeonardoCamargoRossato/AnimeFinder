@@ -1,0 +1,83 @@
+.personal-catalog-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.catalog-export-wrap {
+  position: relative;
+}
+
+.catalog-export-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
+  width: 220px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 18px 55px rgba(0,0,0,.22);
+}
+
+.catalog-export-menu button {
+  width: 100%;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.catalog-export-menu button:hover {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.catalog-export-menu button:disabled { opacity: .6; cursor: wait; }
+
+.personal-catalog-table {
+  table-layout: auto;
+  min-width: 1320px;
+}
+
+.catalog-rank-cell { width: 88px; min-width: 88px; }
+.catalog-poster-cell { width: 72px; min-width: 72px; }
+.catalog-anime-cell { width: 190px; min-width: 190px; }
+.catalog-score-cell { width: 100px; min-width: 100px; }
+.catalog-observation-cell { width: 330px; min-width: 260px; }
+.catalog-comment-cell { width: 260px; min-width: 220px; }
+.catalog-mal-column { width: 112px; min-width: 112px; }
+.catalog-secondary-column { min-width: 180px; }
+
+.catalog-watched-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 6px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #2fb36d 15%, transparent);
+  color: #2fb36d;
+  font-size: .68rem;
+  font-weight: 800;
+}
+
+@media (max-width: 1120px) {
+  .personal-catalog-header-actions { flex-wrap: wrap; }
+  .catalog-comment-cell { min-width: 200px; }
+}
+
+@media (max-width: 760px) {
+  .personal-catalog-header-actions { margin-left: auto; }
+  .personal-catalog-source { display: none; }
+  .personal-catalog-table { min-width: 720px; }
+  .catalog-observation-cell,
+  .catalog-secondary-column,
+  .catalog-mal-column { display: none; }
+  .catalog-comment-cell { width: 210px; min-width: 210px; }
+  .catalog-anime-cell { min-width: 175px; }
+}
