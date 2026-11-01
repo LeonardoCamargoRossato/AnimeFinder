@@ -5,6 +5,7 @@ import App from './App'
 import NavigationEnhancer from './NavigationEnhancer'
 import PersonalCatalogManagerEnhancer from './PersonalCatalogManagerEnhancer'
 import PersonalWorkAssociationEnhancer from './PersonalWorkAssociationEnhancer'
+import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import { handleSupabaseAuthCallback } from './authCallback'
 import './styles.css'
@@ -16,6 +17,7 @@ import './navigation.css'
 import './personal-catalog.css'
 import './personal-catalog-comments.css'
 import './personal-catalog-manager.css'
+import './ai-enrichment.css'
 import './analytics.css'
 
 async function bootstrap() {
@@ -27,6 +29,7 @@ async function bootstrap() {
         <NavigationEnhancer />
         <PersonalCatalogManagerEnhancer />
         <PersonalWorkAssociationEnhancer />
+        <AIEnrichmentEnhancer />
         <WishlistEnhancer />
         <App />
       </HashRouter>
