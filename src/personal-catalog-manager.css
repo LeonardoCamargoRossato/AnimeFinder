@@ -1,0 +1,292 @@
+.catalog-manager-shell {
+  position: relative;
+}
+
+.catalog-manager-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.catalog-manager-toolbar > strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.catalog-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.catalog-manager-actions .compact {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.catalog-manager-actions .ghost-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.catalog-save-message,
+.catalog-ranking-hint {
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.catalog-ranking-hint {
+  border-style: dashed;
+}
+
+.catalog-manager-table tr[draggable="true"] {
+  cursor: grab;
+}
+
+.catalog-manager-table tr[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.catalog-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  border-radius: 7px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 88%, var(--border) 12%);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.catalog-new-row {
+  background: color-mix(in srgb, var(--surface) 91%, var(--accent) 9%);
+}
+
+.catalog-new-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 7px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.catalog-clipped-text {
+  display: block;
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.catalog-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 7, 18, .68);
+  backdrop-filter: blur(8px);
+}
+
+.catalog-add-modal {
+  width: min(720px, 100%);
+  max-height: min(780px, calc(100vh - 32px));
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(0,0,0,.32);
+}
+
+.catalog-modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.catalog-modal-heading h2 { margin: 4px 0 0; }
+
+.catalog-modal-heading > button {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.catalog-add-search,
+.catalog-name-field {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.catalog-add-search input,
+.catalog-name-field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--text);
+  padding: 0 13px;
+}
+
+.catalog-search-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px 0;
+  color: var(--muted);
+}
+
+.catalog-search-results {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.catalog-search-result {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.catalog-search-result:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.catalog-search-result > div {
+  width: 54px;
+  height: 74px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--background);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.catalog-search-result img,
+.catalog-selected-anime img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.catalog-search-result section {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.catalog-search-result small,
+.catalog-search-result span {
+  color: var(--muted);
+}
+
+.catalog-selected-anime {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 93%, var(--accent) 7%);
+}
+
+.catalog-selected-anime > div {
+  width: 78px;
+  height: 108px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.catalog-selected-anime section {
+  display: grid;
+  gap: 6px;
+}
+
+.catalog-selected-anime section > strong {
+  font-size: 18px;
+}
+
+.catalog-selected-anime section > small {
+  color: var(--muted);
+}
+
+.catalog-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.catalog-modal-note {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.catalog-manager-page .catalog-comment-preview {
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+@media (max-width: 760px) {
+  .catalog-manager-toolbar,
+  .catalog-manager-actions {
+    align-items: stretch;
+  }
+
+  .catalog-manager-toolbar {
+    flex-direction: column;
+  }
+
+  .catalog-manager-actions > button:not(.catalog-tool-button),
+  .catalog-manager-actions .catalog-export-wrap {
+    flex: 1 1 auto;
+  }
+
+  .catalog-add-modal {
+    padding: 16px;
+  }
+}
