@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
 import NavigationEnhancer from './NavigationEnhancer'
-import PersonalCatalogEnhancer from './PersonalCatalogEnhancer'
+import PersonalCatalogManagerEnhancer from './PersonalCatalogManagerEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import { handleSupabaseAuthCallback } from './authCallback'
 import './styles.css'
@@ -14,6 +14,7 @@ import './wishlists.css'
 import './navigation.css'
 import './personal-catalog.css'
 import './personal-catalog-comments.css'
+import './personal-catalog-manager.css'
 import './analytics.css'
 
 async function bootstrap() {
@@ -23,7 +24,7 @@ async function bootstrap() {
     <StrictMode>
       <HashRouter>
         <NavigationEnhancer />
-        <PersonalCatalogEnhancer />
+        <PersonalCatalogManagerEnhancer />
         <WishlistEnhancer />
         <App />
       </HashRouter>
