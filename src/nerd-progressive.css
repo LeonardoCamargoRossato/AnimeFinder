@@ -45,6 +45,36 @@
 .nerd-state-dot.empty { background: #9b9fab; }
 .nerd-state-dot.error { background: #df5c66; box-shadow: 0 0 0 5px rgba(223, 92, 102, .12); }
 
+.nerd-simple-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.nerd-simple-fact {
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--accent) 4%);
+}
+
+.nerd-simple-fact span {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.nerd-simple-fact strong {
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
 .nerd-progressive-skeleton {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -63,5 +93,6 @@
 
 @media (max-width: 720px) {
   .nerd-progressive-status { align-items: flex-start; flex-direction: column; }
-  .nerd-progressive-skeleton { grid-template-columns: 1fr; }
+  .nerd-progressive-skeleton,
+  .nerd-simple-grid { grid-template-columns: 1fr; }
 }
