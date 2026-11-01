@@ -1,0 +1,192 @@
+ANIMEFINDER — AI PERSONAL KNOWLEDGE V1
+CONVERSA GUIADA + VERSIONAMENTO + ORGANIZAÇÃO + KEYWORDS + PERSONAGENS
+
+Evoluir a implementação atual de “Enriquecer com IA / AI-Assisted Personal Knowledge”.
+
+NÃO reconstruir o AnimeFinder nem a funcionalidade do zero. Preservar workspace grande, comentário atual, gravação/transcrição, sugestões, painel de conhecimento, Personal Catalog, autenticação, Supabase, Details, Related Works, Analytics, temas e GitHub Pages.
+
+OBJETIVO
+Transformar a experiência atual, que ainda parece formulário, em uma conversa guiada com IA. A IA conversa à esquerda, o usuário responde à direita e o painel direito representa apenas o conhecimento consolidado. Toda alteração importante no comentário deve ser versionada.
+
+1. INTERFACE
+Desktop: workspace quase tela cheia em duas colunas.
+Esquerda: CONVERSA, usando o paradigma moderno IA à esquerda / usuário à direita.
+Direita: PERFIL DA OBRA, com Comentário, Keywords e Personagens.
+Mobile: tabs Conversa | Perfil.
+Não copiar visualmente ChatGPT/WhatsApp; apenas usar o paradigma de conversa.
+
+2. UM ÚNICO COMENTÁRIO
+Remover a duplicação “comentário atual” + “comentário de trabalho”.
+Deve existir apenas um comentário ativo, que pode ser editado, complementado por texto/áudio, organizado pela IA e versionado.
+
+3. COMENTÁRIO COMO MENSAGEM
+Ao abrir, se existir comentário, mostrar como mensagem do usuário alinhada à direita, por exemplo “Você • V5”.
+A mensagem é clicável.
+Ao clicar, a própria bolha vira editor inline. Não abrir outra textarea abaixo nem copiar o texto para outro campo.
+
+4. ÁUDIO
+Manter gravação/transcrição pt-BR.
+A transcrição deve ser anexada ao mesmo editor do comentário atual.
+Não reescrever automaticamente a transcrição com IA.
+Primeiro preservar exatamente o conteúdo do usuário; depois oferecer “Organizar texto com IA”.
+
+5. VERSIONAMENTO
+Cada Save significativo cria nova versão real: V1, V2, V3...
+Nunca sobrescrever silenciosamente a versão anterior.
+Permitir navegar instantaneamente ← Vn / Vtotal → usando cache/local state.
+Se o usuário restaurar uma versão antiga, NÃO apagar versões posteriores. Criar nova versão com source=restored.
+Fontes de versão: manual, voice, ai_organized, restored.
+Autosave local de rascunho; versão oficial só é criada quando Save é acionado.
+
+6. CONVERSA CONTEXTUAL
+Depois de salvar, a IA diz: “Comentário salvo. O que você quer fazer agora?”
+Mostrar ações contextuais, não vinte botões permanentes:
+- ✨ Organizar texto com IA
+- 🏷️ Identificar palavras-chave
+- 👤 Identificar personagens
+Estas operações são independentes. Remover o conceito único “Organizar e sugerir”.
+
+7. ORGANIZAR TEXTO COM IA
+Usar AIService.organizeComment().
+Objetivo: transformar fala/comentário bruto em texto bonito, narrativo, coerente, bem pontuado e dividido em parágrafos, preservando integralmente o sentido.
+Pode corrigir gramática, pontuação, repetições, coesão e organização.
+NÃO pode inventar opinião, personagem, elogio, crítica ou significado.
+A IA nunca substitui automaticamente. Mostrar sugestão com:
+- ✓ Usar esta versão
+- ✏️ Editar
+- ✕ Manter meu texto
+Ao aceitar, criar nova versão source=ai_organized.
+Se IA remota não estiver configurada, NÃO fingir que heurística local possui mesma qualidade. Mostrar claramente: “Organização avançada requer IA.”
+
+8. KEYWORDS
+Usar AIService.extractKeywords().
+Analisar apenas o comentário atual aprovado.
+Sugestões começam com source=ai_suggested, confirmed=false.
+Usuário pode confirmar, remover, adicionar manualmente, editar nome e reordenar por drag-and-drop.
+A ordem representa importância pessoal e deve ser persistida.
+Somente confirmed=true deve ser tratado futuramente como evidência forte.
+Fallback local simples pode existir, mas deve ser identificado como local assist e continuar exigindo confirmação.
+
+9. PERSONAGENS
+Usar AIService.extractCharacters().
+Analisar somente o comentário atual.
+Nesta versão NÃO usar API externa de personagens, MAL character API, fotos, biografias, voice actors nem metadata avançada.
+Armazenar apenas nome, confirmação e conhecimento pessoal.
+Normalizar nomes somente quando houver confiança; em ambiguidade manter o nome informado e permitir correção manual.
+Usuário pode editar, remover, adicionar manualmente e confirmar.
+
+10. ENRIQUECIMENTO DE PERSONAGEM
+Após personagens confirmados, permitir “Enrich”.
+Mini fluxo semelhante ao anime:
+- IA pergunta “O que você acha do <personagem>?”
+- usuário escreve ou fala
+- comentário pessoal do personagem é versionado
+- opcional: Organizar texto com IA
+- opcional: Identificar keywords do personagem
+- IA sugere, usuário confirma
+Não implementar metadata externa nesta versão.
+
+11. PAINEL DIREITO
+Não é segunda conversa e não deve duplicar campos de edição.
+Mostra conhecimento consolidado:
+COMMENT: versão atual, primeiras linhas, quantidade de versões.
+KEYWORDS: ranking, confirmadas e sugestões visualmente distintas.
+CHARACTERS: nome, quantidade de keywords e status de enriquecimento.
+Edição acontece na conversa; painel reflete resultado salvo/sugerido.
+
+12. AI SERVICE
+Centralizar lógica fora dos componentes React:
+AIService.organizeComment()
+AIService.extractKeywords()
+AIService.extractCharacters()
+AIService.organizeCharacterComment()
+AIService.extractCharacterKeywords()
+Provider deve ser substituível.
+Não espalhar lógica de IA pelos componentes.
+Retornos remotos devem ser estruturados e validados antes de atualizar UI.
+
+13. PERSISTÊNCIA
+Preparar Supabase com estruturas version-aware equivalentes a:
+personal_work_comment_versions
+- personal_work_id
+- version_number
+- content
+- created_at
+- source
+
+personal_work_keywords
+- personal_work_id
+- keyword
+- rank
+- source
+- confirmed
+- confidence
+
+personal_work_characters
+- personal_work_id
+- character_name
+- source
+- confirmed
+- confidence
+
+personal_character_comments
+- character_id
+- version_number
+- content
+- source
+- created_at
+
+personal_character_keywords
+- character_id
+- keyword
+- rank
+- confirmed
+- source
+- confidence
+
+Evitar remover V0 de forma destrutiva. Migrar/compatibilizar dados existentes quando possível.
+Usar RLS e somente usuário autorizado.
+Fallback local deve permitir testar a UI mesmo antes da migration.
+
+14. PERFORMANCE
+Abrir workspace imediatamente.
+Editar comentário, trocar versões, reordenar keywords e selecionar personagem devem ser instantâneos.
+Chamadas de IA podem demorar, mas devem mostrar estado de progresso e nunca congelar a interface.
+Não enviar os ~140 animes ao modelo. Enviar apenas obra atual, comentário atual, Original Observations quando relevante, keywords/personagens existentes e metadata mínima.
+Original Observations é histórico e NUNCA deve ser sobrescrito.
+
+15. NÃO IMPLEMENTAR AGORA
+- API externa de personagens
+- fotos/biografias automáticas
+- voice actors
+- análise global dos ~140 animes
+- perfil psicológico
+- recomendação por IA
+- embeddings/RAG global
+- busca semântica global
+
+16. PRINCÍPIO
+A IA não define aquilo que Leonardo gosta.
+A IA organiza, estrutura, identifica e sugere.
+Leonardo edita, confirma, rejeita, ordena e salva.
+
+17. TESTE DE ACEITAÇÃO — WORLD TRIGGER
+1. Abrir Enrich with AI / AI Personal Knowledge.
+2. Comentário existente aparece como mensagem do usuário.
+3. Clicar na mensagem torna a própria mensagem editável.
+4. Adicionar texto manualmente ou por áudio.
+5. Save cria nova versão.
+6. Navegar V1...Vn instantaneamente.
+7. Restaurar versão antiga cria nova versão, sem apagar histórico.
+8. Ações independentes aparecem após save.
+9. Organizar texto com IA cria sugestão; usuário aceita/rejeita; aceitar cria nova versão.
+10. Identificar keywords gera sugestões, usuário confirma/edita/remove/reordena e salva.
+11. Identificar personagens gera apenas nomes do comentário, sem API externa.
+12. Usuário corrige/confirma personagens.
+13. Selecionar Osamu Mikumo e criar comentário pessoal versionado.
+14. Extrair/confirmar keywords do personagem.
+15. Fechar e reabrir workspace.
+16. Comentário, versões, keywords e personagens permanecem salvos.
+17. Interface rápida, responsiva e sem regressões no resto do AnimeFinder.
+
+Implementar como evolução incremental da arquitetura existente.
