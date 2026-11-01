@@ -1,0 +1,235 @@
+ANIMEFINDER — CHARACTER KNOWLEDGE V1
+JIKAN CHARACTER LINKING + FAVORITE CHARACTER PROFILES + PERSONAL KNOWLEDGE GRAPH
+
+OBJECTIVE
+Evolve the CURRENT AnimeFinder incrementally. Do not rebuild AnimeFinder and do not rebuild AI Personal Knowledge. Preserve all working flows.
+
+The current system already contains Personal Catalog, My Watched Anime, My Ranked, Comments, Original Observations, Keywords, AI Personal Knowledge, ranked personal characters, character comments/keywords, MAL anime IDs, Jikan-compatible metadata providers and Supabase.
+
+This version must turn Personal Knowledge characters into real linkable external entities using Jikan/MyAnimeList while keeping PERSONAL KNOWLEDGE and EXTERNAL KNOWLEDGE semantically separate.
+
+CORE PRINCIPLE
+A) PERSONAL CHARACTER KNOWLEDGE belongs to Leonardo:
+- personal rank
+- personal comment
+- personal keywords
+- interpretations
+- confirmed character name
+
+B) EXTERNAL CHARACTER KNOWLEDGE comes from Jikan/MAL:
+- MAL Character ID
+- canonical name
+- image
+- alternative names when available
+- about/biography when available
+- anime/manga appearances
+- role
+- voice actors
+- provider provenance
+
+Jikan refreshes must NEVER overwrite personal rank, personal comments, personal keywords or confirmed personal knowledge.
+
+CHARACTER PROVIDER
+Create/use a CharacterProvider abstraction with a Jikan implementation.
+Use current Jikan v4 endpoints only. Required operations:
+- getAnimeCharacters(animeMalId)
+- getCharacter(characterMalId)
+- searchCharacter(query)
+
+Do not spread Jikan fetch calls through React components.
+
+REQUEST STRATEGY
+Never query characters for the complete watched catalog on page load.
+Only fetch character data when:
+- Link Characters is explicitly requested;
+- Character Profile needs uncached external metadata;
+- a work is explicitly enriched;
+- an explicit manual global search is requested.
+
+CACHE FIRST
+Character Profile flow:
+1. render shell immediately;
+2. render personal comment/keywords/rank immediately;
+3. use local/Supabase cached external metadata if available;
+4. only then refresh from Jikan when needed.
+
+Jikan must never be a critical dependency for Personal Knowledge UI.
+
+CHARACTER LINKING
+From an anime MAL ID, first query the characters belonging to THAT anime. Do not start with a global name search.
+Match the Personal Knowledge character against that roster.
+
+Matching may consider:
+- normalized exact name;
+- reversed name order;
+- first/last name;
+- simple romanization differences;
+- alternative names when present.
+
+Do not use aggressive fuzzy matching.
+
+Possible link states:
+- unlinked
+- suggested_match
+- linked
+- manual
+
+Never silently confirm ambiguous matches.
+High-confidence matches are suggestions that Leonardo confirms.
+Low-confidence matches require manual selection.
+
+MANUAL SEARCH
+When Search manually is selected:
+1. search/filter within the current anime roster first;
+2. show image + name + role;
+3. only offer global Jikan search as explicit fallback.
+
+EXTERNAL IDENTIFIER
+After linking, the stable external reference is:
+- provider = jikan
+- provider_character_id = MAL Character ID
+- canonical_name
+
+Do not use only the character display name as identifier.
+
+MY PERSONAL KNOWLEDGE — ANIME DETAILS
+After Load Personal Knowledge:
+- My Comment
+- Keywords
+- Favorite / Highlighted Characters
+
+Favorite Characters must become compact visual cards ordered by PERSONAL CHARACTER RANK, never Jikan order/popularity/alphabetical order.
+
+Compact card:
+- photo when linked
+- #rank
+- character name
+- optional role
+- unlinked fallback if no external match
+
+Clicking a linked character opens CHARACTER PROFILE as a modal/dialog. Do not navigate to a separate route in V1.
+
+CHARACTER PROFILE
+Visual priority:
+1. MY KNOWLEDGE
+2. CHARACTER INFORMATION
+
+MY KNOWLEDGE first:
+- My Rank (#N in Work)
+- My Comment
+- My Keywords
+
+Then external information, only when Jikan actually provides it:
+- photo
+- canonical name
+- alternative names
+- role
+- MAL Character ID
+- About with Show more
+- anime appearances
+- manga appearances
+- voice actors
+
+Anime appearances can open AnimeFinder Anime Details when a MAL anime ID exists.
+Add:
+- Expand / Restore
+- Close
+- View on MyAnimeList ↗ using a real MAL Character ID
+
+Do not invent missing external fields with AI.
+Do not integrate Fandom, Wikipedia, AniList or scraping in this version.
+
+AI PERSONAL KNOWLEDGE
+Preserve current drag-and-drop character ranking.
+After Save Characters, provide an optional:
+LINK CHARACTERS WITH JIKAN
+
+Linked character rows should show a small avatar when a cached image exists.
+Unlinked characters remain fully functional and show a placeholder + Link action.
+
+MY WATCHED ANIME
+Do not issue per-row Jikan character requests.
+Existing compact character text must continue to work. Mini avatars may be shown only from already cached/linked character data.
+
+SUPABASE
+Add a cache/relation architecture compatible with the current database.
+Use:
+- external_characters as provider metadata cache keyed by provider + provider_character_id;
+- personal_character_external_links as the explicit mapping from Leonardo's personal work character to the external entity.
+
+The external table is cache/provenance data and must not become the owner of personal character knowledge.
+
+Store provenance:
+- provider
+- provider_character_id
+- canonical_name
+- last_synced_at
+- metadata_json for secondary fields
+
+PERSONAL KNOWLEDGE GRAPH DIRECTION
+Architect data so future retrieval can reason conceptually as:
+Leonardo → likes work → favorite character → personal rank/comments/keywords → linked external Jikan character → external anime metadata.
+Do NOT implement global personality analysis, embeddings, RAG, recommendations or “What kind of characters do I like?” yet.
+
+WORLD TRIGGER ACCEPTANCE TEST
+Use the existing World Trigger Personal Knowledge without overwriting it.
+Use currently saved confirmed characters and personal ranking.
+Expected flow:
+World Trigger → My Personal Knowledge → Favorite Characters → Link Characters.
+
+The linker fetches World Trigger characters from Jikan, suggests matches and requires confirmation.
+After linking, cards display the real Jikan/MAL images and retain the exact personal ranking.
+Clicking Osamu (or another linked character) opens Character Profile with MY KNOWLEDGE first and Jikan metadata second.
+
+PERFORMANCE
+Never block Anime Details on character data.
+Never leave an empty modal waiting for Jikan.
+Render personal data first and external data progressively.
+Use local + Supabase cache.
+Use timeouts/retry only inside CharacterProvider.
+
+MOBILE
+Character Profile must become near-fullscreen on small screens.
+Priority on mobile:
+Photo → Name → My Rank → My Comment → My Keywords → External Information.
+
+ADDITIONAL UI HOTFIX FROM CURRENT SCREENSHOT
+In Anime Details → My Personal Knowledge:
+- My Comment currently uses only about half of the available vertical area and scrolls at a fixed height.
+- Remove the fixed 180px behavior.
+- The My Comment card must stretch to the same vertical height as the Keywords / Favorite Characters row and the comment body must use all remaining available height before scrolling.
+- Keep the version label at the bottom.
+
+SCROLLBAR VISUAL LANGUAGE
+Apply AnimeFinder-themed scrollbars consistently:
+- thin/clean scrollbar;
+- light/white-ish track appropriate to theme;
+- purple accent thumb and purple border/details;
+- rounded shape;
+- preserve dark/light theme readability.
+
+DO NOT BREAK
+- Discover
+- My Watched Anime
+- My Lists
+- Anime Details performance
+- Related Works
+- Personal Catalog ranking
+- Comments
+- AI Personal Knowledge
+- character ranking
+- keywords
+- Watched / Wishlist rules
+
+DELIVERABLES
+- CharacterProvider abstraction + Jikan implementation
+- character cache/link repository
+- Character linking UI
+- Character Profile modal
+- My Personal Knowledge favorite-character visual cards
+- optional avatar decoration in AI Personal Knowledge when linked
+- Supabase migration
+- responsive CSS + scrollbar hotfix
+- prompt versioned in /prompts
+- successful TypeScript/Vite build
+- successful GitHub Pages deploy
