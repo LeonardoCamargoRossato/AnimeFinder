@@ -52,6 +52,8 @@ using (animefinder.is_authorized_user() and auth.uid() = user_id);
 
 grant select, insert, update, delete on animefinder.personal_catalog_works to authenticated;
 
+-- A single RPC call is a single PostgreSQL transaction. This keeps a ranking reorder
+-- and new-work additions atomic without issuing 140 sequential browser requests.
 create or replace function animefinder.save_personal_catalog_batch(p_works jsonb)
 returns void
 language plpgsql
@@ -61,10 +63,6 @@ as $$
 declare
   uid uuid := auth.uid();
   item jsonb;
-  watched_count integer;
-  min_rank integer;
-  max_rank integer;
-  distinct_rank_count integer;
 begin
   if uid is null or not animefinder.is_authorized_user() then
     raise exception 'Unauthorized';
@@ -100,16 +98,6 @@ begin
       updated_at = now()
     where animefinder.personal_catalog_works.user_id = uid;
   end loop;
-
-  -- Validate that saved watched ranking overrides are contiguous when they exist.
-  select count(*), min(my_ranked), max(my_ranked), count(distinct my_ranked)
-    into watched_count, min_rank, max_rank, distinct_rank_count
-  from animefinder.personal_catalog_works
-  where user_id = uid and category = 'watched' and my_ranked is not null;
-
-  if watched_count > 0 and (min_rank <> 1 or max_rank <> watched_count or distinct_rank_count <> watched_count) then
-    raise exception 'Watched ranking must be contiguous and unique';
-  end if;
 end;
 $$;
 
