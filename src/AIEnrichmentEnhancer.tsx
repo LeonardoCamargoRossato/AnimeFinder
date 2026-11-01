@@ -4,16 +4,9 @@ import AIEnrichmentWorkspace from './AIEnrichmentWorkspace'
 import { findManagedWorkByMalId, listManagedCatalogWorks, type ManagedCatalogWork } from './personalCatalogManager'
 import { hasLocalKnowledge } from './aiPersonalKnowledge'
 
-function findWorkFromRow(row: HTMLTableRowElement): ManagedCatalogWork | null {
-  const malLink = row.querySelector('a[href*="myanimelist.net/anime/"]') as HTMLAnchorElement | null
-  const malId = malLink?.href.match(/\/anime\/(\d+)/)?.[1]
-  if (malId) {
-    const found = findManagedWorkByMalId(Number(malId))
-    if (found) return found
-  }
-  const title = row.querySelector('.catalog-anime-cell strong')?.textContent?.trim()
-  if (!title) return null
-  return listManagedCatalogWorks().find((work) => work.displayName === title) ?? null
+interface OpenKnowledgeDetail {
+  workId?: string
+  malId?: number | null
 }
 
 export default function AIEnrichmentEnhancer() {
@@ -22,44 +15,27 @@ export default function AIEnrichmentEnhancer() {
   const [, forceRefresh] = useState(0)
 
   useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<OpenKnowledgeDetail>).detail ?? {}
+      const work = detail.workId
+        ? listManagedCatalogWorks().find((item) => item.id === detail.workId) ?? null
+        : detail.malId != null
+          ? findManagedWorkByMalId(Number(detail.malId))
+          : null
+      if (work) setSelected(work)
+    }
+    window.addEventListener('animefinder:open-personal-knowledge', handler)
+    return () => window.removeEventListener('animefinder:open-personal-knowledge', handler)
+  }, [])
+
+  useEffect(() => {
     let cleanupFns: Array<() => void> = []
     let frame = 0
 
     function clear() {
       cleanupFns.forEach((fn) => fn())
       cleanupFns = []
-      document.querySelectorAll('.ai-enrich-injected').forEach((node) => node.remove())
-    }
-
-    function injectCatalogButtons() {
-      const table = document.querySelector('.catalog-manager-table') as HTMLTableElement | null
-      if (!table) return
-      const headerRow = table.querySelector('thead tr')
-      if (headerRow && !headerRow.querySelector('.ai-enrich-column')) {
-        const th = document.createElement('th')
-        th.className = 'ai-enrich-column ai-enrich-injected'
-        th.textContent = 'AI Knowledge'
-        headerRow.appendChild(th)
-      }
-      table.querySelectorAll('tbody tr').forEach((element) => {
-        const row = element as HTMLTableRowElement
-        if (row.querySelector('.ai-enrich-cell')) return
-        const work = findWorkFromRow(row)
-        if (!work) return
-        const cell = document.createElement('td')
-        cell.className = 'ai-enrich-cell ai-enrich-injected'
-        const button = document.createElement('button')
-        button.type = 'button'
-        const enriched = hasLocalKnowledge(work.id)
-        button.className = enriched ? 'ai-enrich-entry enriched' : 'ai-enrich-entry'
-        button.textContent = enriched ? '✨ AI Knowledge' : '✨ Enrich with AI'
-        button.title = `Open Personal Knowledge for ${work.displayName}`
-        const handler = () => setSelected(work)
-        button.addEventListener('click', handler)
-        cleanupFns.push(() => button.removeEventListener('click', handler))
-        cell.appendChild(button)
-        row.appendChild(cell)
-      })
+      document.querySelectorAll('.ai-enrich-details-injected').forEach((node) => node.remove())
     }
 
     function injectDetailsButton() {
@@ -68,11 +44,11 @@ export default function AIEnrichmentEnhancer() {
       const work = findManagedWorkByMalId(Number(match[1]))
       if (!work) return
       const actions = document.querySelector('.details-v2-actions') as HTMLElement | null
-      if (!actions || actions.querySelector('.ai-enrich-entry')) return
+      if (!actions || actions.querySelector('.ai-enrich-details-injected')) return
       const enriched = hasLocalKnowledge(work.id)
       const button = document.createElement('button')
       button.type = 'button'
-      button.className = enriched ? 'ghost-button ai-enrich-entry ai-enrich-injected enriched' : 'ghost-button ai-enrich-entry ai-enrich-injected'
+      button.className = enriched ? 'ghost-button ai-enrich-entry ai-enrich-details-injected enriched' : 'ghost-button ai-enrich-entry ai-enrich-details-injected'
       button.textContent = enriched ? '✨ AI Personal Knowledge' : '✨ Enrich with AI'
       const handler = () => setSelected(work)
       button.addEventListener('click', handler)
@@ -82,10 +58,7 @@ export default function AIEnrichmentEnhancer() {
 
     function sync() {
       cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        if (location.pathname === '/app/my-anime') injectCatalogButtons()
-        injectDetailsButton()
-      })
+      frame = requestAnimationFrame(injectDetailsButton)
     }
 
     sync()
