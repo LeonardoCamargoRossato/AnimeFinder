@@ -1,0 +1,67 @@
+.nerd-progressive-host { margin-top: 14px; }
+
+.nerd-progressive-idle {
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.nerd-progressive-dashboard {
+  display: grid;
+  gap: 14px;
+}
+
+.nerd-progressive-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+}
+
+.nerd-progressive-status > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.nerd-progressive-status small { color: var(--muted); }
+
+.nerd-state-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.nerd-state-dot.loading { background: #e0a13a; box-shadow: 0 0 0 5px rgba(224, 161, 58, .12); }
+.nerd-state-dot.success { background: #2fb36d; box-shadow: 0 0 0 5px rgba(47, 179, 109, .12); }
+.nerd-state-dot.partial { background: #6f8df6; box-shadow: 0 0 0 5px rgba(111, 141, 246, .12); }
+.nerd-state-dot.empty { background: #9b9fab; }
+.nerd-state-dot.error { background: #df5c66; box-shadow: 0 0 0 5px rgba(223, 92, 102, .12); }
+
+.nerd-progressive-skeleton {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.nerd-progressive-skeleton span {
+  height: 64px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--surface) 85%, var(--border) 15%), color-mix(in srgb, var(--surface) 72%, var(--border) 28%), color-mix(in srgb, var(--surface) 85%, var(--border) 15%));
+  background-size: 200% 100%;
+  animation: nerdPulse 1.3s linear infinite;
+}
+
+@keyframes nerdPulse { to { background-position: -200% 0; } }
+
+@media (max-width: 720px) {
+  .nerd-progressive-status { align-items: flex-start; flex-direction: column; }
+  .nerd-progressive-skeleton { grid-template-columns: 1fr; }
+}
