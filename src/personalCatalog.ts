@@ -14,15 +14,30 @@ export type PersonalCatalogCategory =
   | 'new-seasons-2026'
   | 'needs-classification'
 
+interface RawPersonalCatalogItem {
+  anime: string
+  malUrl: string | null
+  malId: number | null
+  malScore: number | null
+  observations?: string | null
+  originalObservations?: string | null
+  englishName: string | null
+  originalName: string | null
+  myRanked: number | null
+  category: PersonalCatalogCategory
+}
+
 export interface PersonalCatalogItem {
   anime: string
   malUrl: string | null
   malId: number | null
   malScore: number | null
-  observations: string | null
+  originalObservations: string | null
+  comments: string | null
   englishName: string | null
   originalName: string | null
   myRanked: number | null
+  watched: boolean
   category: PersonalCatalogCategory
 }
 
@@ -35,13 +50,33 @@ export const personalCatalogCategories: { id: PersonalCatalogCategory; label: st
   { id: 'needs-classification', label: 'Needs Classification' },
 ]
 
-const snapshot = [
+const rawSnapshot = [
   ...watched1,
   ...watched2,
   ...watched3,
   ...watched4,
   ...other,
-] as PersonalCatalogItem[]
+] as RawPersonalCatalogItem[]
+
+const snapshot: PersonalCatalogItem[] = rawSnapshot.map((item) => ({
+  anime: item.anime,
+  malUrl: item.malUrl,
+  malId: item.malId,
+  malScore: item.malScore,
+  originalObservations: item.originalObservations ?? item.observations ?? null,
+  comments: null,
+  englishName: item.englishName,
+  originalName: item.originalName,
+  myRanked: item.myRanked,
+  watched: item.category === 'watched',
+  category: item.category,
+}))
+
+const watchedMalIds = new Set(
+  snapshot
+    .filter((item) => item.watched && item.malId != null)
+    .map((item) => item.malId as number),
+)
 
 const metadataCache = new Map<number, Promise<Anime>>()
 const queue: Array<() => void> = []
@@ -77,6 +112,14 @@ function normalize(value: string) {
     .toLowerCase()
 }
 
+export function isPersonalCatalogWatched(malId: number) {
+  return watchedMalIds.has(malId)
+}
+
+export function personalCatalogWatchedItems() {
+  return snapshot.filter((item) => item.watched)
+}
+
 export const personalCatalogRepository = {
   list(category: PersonalCatalogCategory): PersonalCatalogItem[] {
     return snapshot.filter((item) => item.category === category)
@@ -91,8 +134,12 @@ export const personalCatalogRepository = {
       item.anime,
       item.englishName,
       item.originalName,
-      item.observations,
+      item.originalObservations,
     ].filter(Boolean).join(' ')).includes(term))
+  },
+
+  isWatched(malId: number): boolean {
+    return isPersonalCatalogWatched(malId)
   },
 
   getMetadata(malId: number): Promise<Anime> {
