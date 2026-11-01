@@ -1,0 +1,124 @@
+.catalog-v2-shell .personal-catalog-table-wrap { overflow-x: auto; }
+.catalog-v2-table { min-width: 1900px; }
+.catalog-v2-table th { white-space: nowrap; }
+.catalog-v2-table td { vertical-align: middle; }
+.catalog-v2-table .catalog-comment-cell { min-width: 220px; max-width: 280px; }
+.catalog-v2-table .catalog-observation-cell { min-width: 210px; max-width: 260px; }
+
+.catalog-mini-pills {
+  min-width: 135px;
+  max-width: 230px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.catalog-mini-pills > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 180px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 93%, var(--accent) 7%);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catalog-mini-pills .muted-pill { color: var(--muted); background: transparent; }
+.catalog-mini-pills .more-pill { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+
+.catalog-add-modal-v2 .catalog-name-field span small {
+  color: var(--muted);
+  font-weight: 500;
+  margin-left: 5px;
+}
+.catalog-choice-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+}
+.catalog-choice-row input { margin-top: 3px; }
+.catalog-choice-row > span { display: grid; gap: 3px; }
+.catalog-choice-row small { color: var(--muted); line-height: 1.4; }
+
+.pk-character-row {
+  grid-template-columns: 22px 36px minmax(0,1fr) auto auto auto auto !important;
+}
+.pk-order-help { color: var(--muted); line-height: 1.45; }
+
+.personal-knowledge-details-section { margin-top: 26px; }
+.personal-knowledge-details-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(240px, .8fr) minmax(260px, 1fr);
+  gap: 12px;
+}
+.personal-knowledge-details-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.personal-knowledge-details-card > span {
+  display: block;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  margin-bottom: 9px;
+}
+.personal-knowledge-details-card p { margin: 0; white-space: pre-wrap; line-height: 1.62; }
+.personal-knowledge-details-card.comment-card p { max-height: 180px; overflow: auto; }
+.personal-knowledge-details-card > small { display: block; margin-top: 10px; color: var(--muted); }
+.personal-knowledge-ranked-list,
+.personal-knowledge-character-list { display: grid; gap: 7px; }
+.personal-knowledge-ranked-list b {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--background);
+  font-size: 12px;
+}
+.personal-knowledge-character-list > div {
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+}
+.personal-knowledge-character-list small { color: var(--muted); line-height: 1.4; }
+.personal-knowledge-details-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+
+.wishlist-trigger.watched-locked,
+.wishlist-trigger:disabled.watched-locked {
+  opacity: .58;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+@media (max-width: 1050px) {
+  .personal-knowledge-details-grid { grid-template-columns: 1fr 1fr; }
+  .personal-knowledge-details-card.comment-card { grid-column: 1 / -1; }
+  .pk-character-row { grid-template-columns: 22px 34px minmax(0,1fr) auto auto !important; }
+  .pk-character-row small { grid-column: 3 / -1; }
+}
+
+@media (max-width: 720px) {
+  .personal-knowledge-details-grid { grid-template-columns: 1fr; }
+  .personal-knowledge-details-card.comment-card { grid-column: auto; }
+  .personal-knowledge-details-actions { grid-column: auto; }
+  .catalog-v2-table { min-width: 1650px; }
+  .pk-character-row { grid-template-columns: 22px 34px minmax(0,1fr) !important; }
+  .pk-character-row small { grid-column: 3; }
+  .pk-character-row button { grid-column: auto; }
+}
