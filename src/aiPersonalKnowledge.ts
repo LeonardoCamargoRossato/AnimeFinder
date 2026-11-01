@@ -222,7 +222,7 @@ export async function loadPersonalKnowledge(personalWorkId: string, malId: numbe
     id: String(row.id),
     name: row.character_name,
     rank: Number(row.rank) || index + 1,
-    source: row.source === 'manual' ? 'manual' : 'ai_suggested',
+    source: (row.source === 'manual' ? 'manual' : 'ai_suggested') as KnowledgeSource,
     confirmed: Boolean(row.confirmed),
     confidence: row.confidence == null ? null : Number(row.confidence),
     commentVersions: commentsByCharacter.get(String(row.id)) ?? [],
