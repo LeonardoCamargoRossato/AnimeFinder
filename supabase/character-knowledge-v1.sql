@@ -29,13 +29,12 @@ create table if not exists animefinder.personal_character_external_links (
   updated_at timestamptz not null default now(),
   primary key (user_id, personal_work_id, personal_character_id),
   constraint personal_character_external_links_provider_check check (provider in ('jikan')),
-  constraint personal_character_external_links_state_check check (link_state in ('unlinked','suggested_match','linked','manual')),
-  constraint personal_character_external_links_external_fk
-    foreign key (provider, provider_character_id)
-    references animefinder.external_characters(provider, provider_character_id)
-    on update cascade on delete restrict
+  constraint personal_character_external_links_state_check check (link_state in ('unlinked','suggested_match','linked','manual'))
 );
 
+-- The link intentionally stores the stable provider + provider_character_id pair directly.
+-- external_characters is a cache, not a critical dependency, so linking can succeed even
+-- before the full external profile has been hydrated into the cache table.
 create index if not exists personal_character_external_links_work_idx
   on animefinder.personal_character_external_links(user_id, personal_work_id);
 create index if not exists personal_character_external_links_external_idx
@@ -86,7 +85,6 @@ using (animefinder.is_authorized_user() and auth.uid() = user_id);
 grant select, insert, update on animefinder.external_characters to authenticated;
 grant select, insert, update, delete on animefinder.personal_character_external_links to authenticated;
 
--- Optional cleanup helper: keeps link timestamps consistent when updates are performed directly.
 create or replace function animefinder.touch_character_link_updated_at()
 returns trigger
 language plpgsql
