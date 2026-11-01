@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router-dom'
 import App from './App'
 import NavigationEnhancer from './NavigationEnhancer'
 import PersonalCatalogManagerEnhancer from './PersonalCatalogManagerEnhancer'
+import PersonalWorkAssociationEnhancer from './PersonalWorkAssociationEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import { handleSupabaseAuthCallback } from './authCallback'
 import './styles.css'
@@ -25,6 +26,7 @@ async function bootstrap() {
       <HashRouter>
         <NavigationEnhancer />
         <PersonalCatalogManagerEnhancer />
+        <PersonalWorkAssociationEnhancer />
         <WishlistEnhancer />
         <App />
       </HashRouter>
