@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { listWatched, removeWatched, saveWatched, watchedFromAnime } from './catalog'
@@ -7,11 +7,8 @@ import { loadSynopsisBundle, type SynopsisBundle } from './synopsis'
 import {
   animeDetailsService,
   franchiseService,
-  nerdDataService,
   type AnimeDetailsOverview,
   type FranchiseResult,
-  type NerdData,
-  type NerdSection,
   type RelatedWork,
 } from './animeDetails'
 import './details-v2.css'
@@ -50,40 +47,6 @@ function RelatedWorkCard({ work, selectedId, onOpen }: { work: RelatedWork; sele
   )
 }
 
-function NerdValue({ value }: { value: string | string[] | number }) {
-  if (Array.isArray(value)) {
-    return <ul>{value.map((entry, index) => <li key={`${entry}-${index}`}>{entry}</li>)}</ul>
-  }
-  return <span>{String(value)}</span>
-}
-
-function NerdAccordion({ section, open, onToggle }: { section: NerdSection; open: boolean; onToggle: () => void }) {
-  return (
-    <article className={open ? 'details-v2-nerd-card open' : 'details-v2-nerd-card'}>
-      <button type="button" className="details-v2-nerd-toggle" onClick={onToggle} aria-expanded={open}>
-        <span>{section.label}</span>
-        <small>{section.fields.length ? `${section.fields.length} fields` : 'No data'}</small>
-        <b>{open ? '−' : '+'}</b>
-      </button>
-      {open && (
-        <div className="details-v2-nerd-content">
-          {section.fields.length ? section.fields.map((entry) => (
-            <div className="details-v2-nerd-field" key={entry.label}>
-              <span>{entry.label}</span>
-              <div>
-                <NerdValue value={entry.datum.value} />
-                {entry.datum.sourceUrl
-                  ? <a href={entry.datum.sourceUrl} target="_blank" rel="noreferrer" title={`Source: ${entry.datum.source}`}>Source ↗</a>
-                  : <small>Source: {entry.datum.source}</small>}
-              </div>
-            </div>
-          )) : <div className="details-v2-no-data">No data from a reliable structured source yet.</div>}
-        </div>
-      )}
-    </article>
-  )
-}
-
 function DetailsSkeleton() {
   return (
     <div className="page details-v2-page">
@@ -113,12 +76,6 @@ function AnimeDetailsV2({ malId }: { malId: number }) {
   const [synopsisLoading, setSynopsisLoading] = useState(true)
   const [showOriginal, setShowOriginal] = useState(false)
   const [audioOpen, setAudioOpen] = useState(false)
-  const [nerdData, setNerdData] = useState<NerdData | null>(null)
-  const [nerdLoading, setNerdLoading] = useState(false)
-  const [nerdRequested, setNerdRequested] = useState(false)
-  const [nerdError, setNerdError] = useState('')
-  const [openNerdSections, setOpenNerdSections] = useState<Set<string>>(new Set())
-  const nerdRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' })
@@ -131,10 +88,6 @@ function AnimeDetailsV2({ malId }: { malId: number }) {
     setSynopsisLoading(true)
     setShowOriginal(false)
     setAudioOpen(false)
-    setNerdData(null)
-    setNerdRequested(false)
-    setNerdError('')
-    setOpenNerdSections(new Set())
 
     let live = true
     void Promise.all([animeDetailsService.getOverview(malId), listWatched()])
@@ -158,38 +111,9 @@ function AnimeDetailsV2({ malId }: { malId: number }) {
     return () => { live = false }
   }, [malId])
 
-  useEffect(() => {
-    const target = nerdRef.current
-    if (!target || nerdRequested || !overview) return
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return
-      setNerdRequested(true)
-      observer.disconnect()
-    }, { rootMargin: '500px 0px' })
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [nerdRequested, overview])
-
-  useEffect(() => {
-    if (!nerdRequested || !overview || nerdData || nerdLoading) return
-    let live = true
-    setNerdLoading(true)
-    void nerdDataService.getNerdData(malId, overview.anime)
-      .then((data) => live && setNerdData(data))
-      .catch((reason) => live && setNerdError(reason instanceof Error ? reason.message : 'Advanced data is unavailable right now.'))
-      .finally(() => live && setNerdLoading(false))
-    return () => { live = false }
-  }, [nerdRequested, overview, nerdData, nerdLoading, malId])
-
   const visibleSynopsis = showOriginal ? synopsis?.original : synopsis?.portuguese || synopsis?.original
   const synopsisIsPortuguese = !showOriginal && Boolean(synopsis?.portuguese)
   const speechLang = visibleSynopsis ? (synopsisIsPortuguese ? 'pt-BR' : detectOriginalSpeechLanguage(visibleSynopsis)) : 'pt-BR'
-
-  const dubbing = useMemo(() => {
-    const languages = nerdData?.dubbingLanguages ?? []
-    const priority = ['Japanese', 'English', 'Portuguese (BR)']
-    return priority.filter((language) => languages.includes(language)).join(' · ') || null
-  }, [nerdData])
 
   async function toggleWatched() {
     if (!overview) return
@@ -253,7 +177,6 @@ function AnimeDetailsV2({ malId }: { malId: number }) {
             <div><span>Original Creator</span><strong>{overview.creator ?? 'No data'}</strong></div>
             <div><span>Source</span><strong>{overview.sourceTitle ?? overview.sourceType ?? anime.source ?? 'No data'}</strong><small>{overview.sourceTitle && overview.sourceType ? overview.sourceType : ''}</small></div>
             <div><span>Studio</span><strong>{overview.studio ?? 'No data'}</strong></div>
-            {dubbing && <div><span>Recorded audio</span><strong>{dubbing}</strong></div>}
           </div>
 
           <div className="details-v2-facts">
@@ -319,31 +242,10 @@ function AnimeDetailsV2({ malId }: { malId: number }) {
         <div className="details-v2-variant-grid">{anime.titles.map((title, index) => <div key={`${title.type}-${index}`}><span>{title.type}</span><strong>{title.title}</strong></div>)}</div>
       </section>
 
-      <section className="details-v2-nerd-section" ref={nerdRef}>
+      <section className="details-v2-nerd-section">
         <div className="details-v2-section-heading">
-          <div><span className="eyebrow">ADVANCED DATABASE</span><h2>For Nerds</h2><p>Structured technical metadata only. Unsupported facts are never guessed.</p></div>
+          <div><span className="eyebrow">ADVANCED DATABASE</span><h2>For Nerds</h2><p>Quick technical info. Heavy metadata loads only after opening Deep Analysis.</p></div>
         </div>
-        {!nerdRequested || nerdLoading ? (
-          <div className="details-v2-nerd-loading"><span className="spinner" /><span>Loading advanced metadata when needed…</span></div>
-        ) : nerdError ? (
-          <div className="notice error">{nerdError}</div>
-        ) : nerdData ? (
-          <div className="details-v2-nerd-grid">
-            {nerdData.sections.map((section) => (
-              <NerdAccordion
-                key={section.id}
-                section={section}
-                open={openNerdSections.has(section.id)}
-                onToggle={() => setOpenNerdSections((current) => {
-                  const next = new Set(current)
-                  if (next.has(section.id)) next.delete(section.id)
-                  else next.add(section.id)
-                  return next
-                })}
-              />
-            ))}
-          </div>
-        ) : null}
       </section>
     </div>
   )
