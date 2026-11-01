@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
-import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { animeProvider, type AnimePage } from './providers'
 import {
   type Anime,
@@ -18,6 +18,7 @@ import {
   watchedFromAnime,
 } from './catalog'
 import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from './supabase'
+import AnimeDetailsRoute from './AnimeDetailsRoute'
 
 const AUTHORIZED_EMAIL = 'leo.c.rossato@gmail.com'
 const DISCOVER_PAGE_SIZE = 12
@@ -253,7 +254,7 @@ function PrivateApp({ user, dark, setDark }: { user: User; dark: boolean; setDar
           <Route index element={<Discover />} />
           <Route path="my-anime" element={<MyAnime />} />
           <Route path="import" element={<ImportPage />} />
-          <Route path="anime/:id" element={<AnimeDetails />} />
+          <Route path="anime/:id" element={<AnimeDetailsRoute />} />
           <Route path="settings" element={<Settings user={user} />} />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
@@ -545,45 +546,6 @@ function ImportPage() {
         {message && <div className="notice success">{message}</div>}
         <div className="import-table-wrap"><table className="import-table"><thead><tr><th>Original title</th><th>Possible MAL match</th><th>MAL ID</th><th>Score</th><th>Match status</th><th>Actions</th></tr></thead><tbody>{candidates.map((row) => <tr key={row.key}><td><strong>{row.originalTitle}</strong><div className="inline-search"><input value={searchTerms[row.key] ?? ''} onChange={(event) => setSearchTerms({ ...searchTerms, [row.key]: event.target.value })} /><button onClick={() => searchCandidate(row, searchTerms[row.key] || row.originalTitle)}>Search</button></div></td><td>{row.loading ? 'Searching…' : row.alternatives?.length ? <select value={row.match?.malId ?? ''} onChange={(event) => chooseMatch(row.key, Number(event.target.value))}>{row.alternatives.map((anime) => <option key={anime.malId} value={anime.malId}>{anime.title}{anime.year ? ` (${anime.year})` : ''}</option>)}</select> : 'No match found'}</td><td>{row.match?.malId ?? '—'}</td><td>{row.match?.score?.toFixed(1) ?? '—'}</td><td><span className={`match-pill ${row.status}`}>{row.status.replace('_', ' ')}</span></td><td><div className="row-actions"><button onClick={() => setCandidates((rows) => rows.map((item) => item.key === row.key ? { ...item, status: 'manually_confirmed' } : item))} disabled={!row.match}>Confirm</button><button onClick={() => setCandidates((rows) => rows.map((item) => item.key === row.key ? { ...item, match: null, status: 'unmatched' } : item))}>Reject</button></div></td></tr>)}</tbody></table></div>
       </section>}
-    </div>
-  )
-}
-
-function AnimeDetails() {
-  const { id } = useParams()
-  const [anime, setAnime] = useState<Anime | null>(null)
-  const [watched, setWatched] = useState(false)
-  const [error, setError] = useState('')
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    const malId = Number(id)
-    if (!Number.isFinite(malId)) return
-    Promise.all([animeProvider.getAnime(malId), listWatched()])
-      .then(([item, rows]) => { setAnime(item); setWatched(rows.some((row) => row.mal_id === malId)) })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load this anime.'))
-  }, [id])
-
-  if (error) return <div className="page narrow-page"><div className="notice error">{error}</div></div>
-  if (!anime) return <div className="page narrow-page"><div className="notice">Loading anime details…</div></div>
-
-  return (
-    <div className="page details-page">
-      <button className="text-button back-button" onClick={() => navigate(-1)}>← Back</button>
-      <section className="details-hero">
-        <div className="details-poster">{anime.largeImageUrl || anime.imageUrl ? <img src={anime.largeImageUrl || anime.imageUrl!} alt={anime.title} /> : null}</div>
-        <div className="details-copy">
-          <div className="eyebrow">MAL #{anime.malId}</div>
-          <h1>{anime.title}</h1>
-          {anime.titleEnglish && anime.titleEnglish !== anime.title && <h2>{anime.titleEnglish}</h2>}
-          {anime.titleJapanese && <div className="japanese-title">{anime.titleJapanese}</div>}
-          <div className="detail-stats"><div><b>★ {anime.score?.toFixed(1) ?? '—'}</b><span>Score</span></div><div><b>{anime.episodes ?? '—'}</b><span>Episodes</span></div><div><b>{anime.type ?? '—'}</b><span>Type</span></div><div><b>{anime.year ?? '—'}</b><span>Year</span></div></div>
-          <div className="genre-row large">{anime.genres.map((genre) => <span key={genre.id}>{genre.name}</span>)}</div>
-          <p className="synopsis">{anime.synopsis || 'No synopsis available.'}</p>
-          <div className="details-actions"><button className={watched ? 'primary-button watched-primary' : 'primary-button'} onClick={async () => { try { if (watched) await removeWatched(anime.malId); else await saveWatched(watchedFromAnime(anime)); setWatched(!watched) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update your catalog.') } }}>{watched ? '✓ Watched' : '+ Mark as watched'}</button>{anime.url && <a className="ghost-button link-button" href={anime.url} target="_blank" rel="noreferrer">Open on MyAnimeList ↗</a>}</div>
-        </div>
-      </section>
-      <section className="title-variants"><div className="section-heading compact"><div><span className="eyebrow">IDENTIFICATION</span><h2>Known title variants</h2></div></div><div className="variant-grid">{anime.titles.map((title, index) => <div key={`${title.type}-${index}`}><span>{title.type}</span><strong>{title.title}</strong></div>)}</div></section>
     </div>
   )
 }
