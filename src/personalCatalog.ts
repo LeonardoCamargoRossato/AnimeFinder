@@ -45,9 +45,9 @@ export const personalCatalogCategories: { id: PersonalCatalogCategory; label: st
   { id: 'watched', label: 'Watched' },
   { id: 'movies', label: 'Movies' },
   { id: 'manhua', label: 'Manhua' },
+  { id: 'needs-classification', label: 'Needs Classification' },
   { id: 'dropped-unfinished', label: 'Dropped / Unfinished' },
   { id: 'new-seasons-2026', label: 'New Seasons 2026' },
-  { id: 'needs-classification', label: 'Needs Classification' },
 ]
 
 const rawSnapshot = [
