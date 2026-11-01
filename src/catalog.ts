@@ -1,6 +1,6 @@
 import type { Anime, WatchedAnime } from './types'
 import { isSupabaseConfigured, supabase } from './supabase'
-import { isPersonalCatalogWatched, personalCatalogWatchedItems } from './personalCatalog'
+import { isManagedMalIdWatched, managedWatchedRows } from './personalCatalogManager'
 
 async function requireCurrentUser() {
   if (!isSupabaseConfigured || !supabase) {
@@ -26,24 +26,8 @@ export function watchedFromAnime(anime: Anime, originalTitle = anime.title): Wat
   }
 }
 
-function personalCatalogWatchedRows(): WatchedAnime[] {
-  return personalCatalogWatchedItems()
-    .filter((item) => item.malId != null)
-    .map((item) => ({
-      id: `personal-${item.malId}`,
-      mal_id: item.malId,
-      title_original: item.anime,
-      title_english: item.englishName,
-      title_romaji: item.anime,
-      title_japanese: item.originalName,
-      title_portuguese: null,
-      title_chinese: null,
-      match_status: 'manually_confirmed' as const,
-    }))
-}
-
 export function isAnimeWatched(malId: number, rows: WatchedAnime[] = []) {
-  return isPersonalCatalogWatched(malId) || rows.some((row) => row.mal_id === malId)
+  return isManagedMalIdWatched(malId) || rows.some((row) => row.mal_id === malId)
 }
 
 export async function listWatched(): Promise<WatchedAnime[]> {
@@ -57,7 +41,7 @@ export async function listWatched(): Promise<WatchedAnime[]> {
   if (error) throw new Error(error.message)
 
   const merged = new Map<number, WatchedAnime>()
-  for (const row of personalCatalogWatchedRows()) {
+  for (const row of managedWatchedRows()) {
     if (row.mal_id != null) merged.set(row.mal_id, row)
   }
   for (const row of (data ?? []) as WatchedAnime[]) {
