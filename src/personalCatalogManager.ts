@@ -40,7 +40,7 @@ function statusForCategory(category: PersonalCatalogCategory): PersonalWatchStat
 }
 
 function stableSnapshotId(item: PersonalCatalogItem, index: number) {
-  return `snapshot:${item.category}:${item.malId ?? normalizePersonalWorkName(item.anime) || index}`
+  return `snapshot:${item.category}:${item.malId ?? (normalizePersonalWorkName(item.anime) || index)}`
 }
 
 function snapshotWorks(): ManagedCatalogWork[] {
