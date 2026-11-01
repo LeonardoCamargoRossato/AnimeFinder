@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import AIEnrichmentWorkspace from './AIEnrichmentWorkspace'
 import { findManagedWorkByMalId, listManagedCatalogWorks, type ManagedCatalogWork } from './personalCatalogManager'
-import { hasLocalEnrichment } from './aiEnrichment'
-import type { AnimeComment } from './comments'
+import { hasLocalKnowledge } from './aiPersonalKnowledge'
 
 function findWorkFromRow(row: HTMLTableRowElement): ManagedCatalogWork | null {
   const malLink = row.querySelector('a[href*="myanimelist.net/anime/"]') as HTMLAnchorElement | null
@@ -39,7 +38,7 @@ export default function AIEnrichmentEnhancer() {
       if (headerRow && !headerRow.querySelector('.ai-enrich-column')) {
         const th = document.createElement('th')
         th.className = 'ai-enrich-column ai-enrich-injected'
-        th.textContent = 'AI Profile'
+        th.textContent = 'AI Knowledge'
         headerRow.appendChild(th)
       }
       table.querySelectorAll('tbody tr').forEach((element) => {
@@ -51,9 +50,10 @@ export default function AIEnrichmentEnhancer() {
         cell.className = 'ai-enrich-cell ai-enrich-injected'
         const button = document.createElement('button')
         button.type = 'button'
-        button.className = hasLocalEnrichment(work.id) ? 'ai-enrich-entry enriched' : 'ai-enrich-entry'
-        button.textContent = hasLocalEnrichment(work.id) ? '✨ Enriched' : '✨ Enrich with AI'
-        button.title = `Enrich ${work.displayName} with AI`
+        const enriched = hasLocalKnowledge(work.id)
+        button.className = enriched ? 'ai-enrich-entry enriched' : 'ai-enrich-entry'
+        button.textContent = enriched ? '✨ AI Knowledge' : '✨ Enrich with AI'
+        button.title = `Open Personal Knowledge for ${work.displayName}`
         const handler = () => setSelected(work)
         button.addEventListener('click', handler)
         cleanupFns.push(() => button.removeEventListener('click', handler))
@@ -69,10 +69,11 @@ export default function AIEnrichmentEnhancer() {
       if (!work) return
       const actions = document.querySelector('.details-v2-actions') as HTMLElement | null
       if (!actions || actions.querySelector('.ai-enrich-entry')) return
+      const enriched = hasLocalKnowledge(work.id)
       const button = document.createElement('button')
       button.type = 'button'
-      button.className = hasLocalEnrichment(work.id) ? 'ghost-button ai-enrich-entry ai-enrich-injected enriched' : 'ghost-button ai-enrich-entry ai-enrich-injected'
-      button.textContent = hasLocalEnrichment(work.id) ? '✨ Enriched with AI' : '✨ Enrich with AI'
+      button.className = enriched ? 'ghost-button ai-enrich-entry ai-enrich-injected enriched' : 'ghost-button ai-enrich-entry ai-enrich-injected'
+      button.textContent = enriched ? '✨ AI Personal Knowledge' : '✨ Enrich with AI'
       const handler = () => setSelected(work)
       button.addEventListener('click', handler)
       cleanupFns.push(() => button.removeEventListener('click', handler))
@@ -98,5 +99,5 @@ export default function AIEnrichmentEnhancer() {
     }
   }, [location.pathname, location.search])
 
-  return selected ? <AIEnrichmentWorkspace work={selected} onClose={() => setSelected(null)} onSaved={(_profile, _comment: AnimeComment | null) => forceRefresh((value) => value + 1)} /> : null
+  return selected ? <AIEnrichmentWorkspace work={selected} onClose={() => setSelected(null)} onSaved={() => forceRefresh((value) => value + 1)} /> : null
 }
