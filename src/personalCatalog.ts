@@ -72,13 +72,15 @@ const snapshot: PersonalCatalogItem[] = rawSnapshot.map((item) => ({
   category: item.category,
 }))
 
+const watchedItems = snapshot.filter((item) => item.watched)
 const watchedMalIds = new Set(
-  snapshot
-    .filter((item) => item.watched && item.malId != null)
+  watchedItems
+    .filter((item) => item.malId != null)
     .map((item) => item.malId as number),
 )
 
 const metadataCache = new Map<number, Promise<Anime>>()
+const resolvedMetadata = new Map<number, Anime>()
 const queue: Array<() => void> = []
 let activeRequests = 0
 const MAX_CONCURRENT_METADATA_REQUESTS = 3
@@ -95,7 +97,10 @@ function scheduleMetadata(malId: number): Promise<Anime> {
   return new Promise((resolve, reject) => {
     queue.push(() => {
       animeProvider.getAnime(malId)
-        .then(resolve, reject)
+        .then((anime) => {
+          resolvedMetadata.set(malId, anime)
+          resolve(anime)
+        }, reject)
         .finally(() => {
           activeRequests -= 1
           pumpQueue()
@@ -117,7 +122,7 @@ export function isPersonalCatalogWatched(malId: number) {
 }
 
 export function personalCatalogWatchedItems() {
-  return snapshot.filter((item) => item.watched)
+  return watchedItems
 }
 
 export const personalCatalogRepository = {
@@ -138,11 +143,29 @@ export const personalCatalogRepository = {
     ].filter(Boolean).join(' ')).includes(term))
   },
 
+  findByMalId(malId: number): PersonalCatalogItem | null {
+    return snapshot.find((item) => item.malId === malId) ?? null
+  },
+
   isWatched(malId: number): boolean {
     return isPersonalCatalogWatched(malId)
   },
 
+  watchedCount(): number {
+    return watchedItems.length
+  },
+
+  watchedMalIds(): Set<number> {
+    return new Set(watchedMalIds)
+  },
+
+  getCachedMetadata(malId: number): Anime | null {
+    return resolvedMetadata.get(malId) ?? null
+  },
+
   getMetadata(malId: number): Promise<Anime> {
+    const cachedResolved = resolvedMetadata.get(malId)
+    if (cachedResolved) return Promise.resolve(cachedResolved)
     const cached = metadataCache.get(malId)
     if (cached) return cached
 
