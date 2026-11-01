@@ -6,6 +6,7 @@ import NavigationEnhancer from './NavigationEnhancer'
 import PersonalCatalogManagerV2Enhancer from './PersonalCatalogManagerV2Enhancer'
 import PersonalWorkAssociationEnhancer from './PersonalWorkAssociationEnhancer'
 import PersonalKnowledgeDetailsEnhancer from './PersonalKnowledgeDetailsEnhancer'
+import CharacterKnowledgeEnhancer from './CharacterKnowledgeEnhancer'
 import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import WishlistWatchedLockEnhancer from './WishlistWatchedLockEnhancer'
@@ -25,6 +26,7 @@ import './personal-catalog-manager.css'
 import './personal-catalog-v2.css'
 import './ai-enrichment.css'
 import './ai-personal-knowledge.css'
+import './character-knowledge.css'
 import './analytics.css'
 
 async function bootstrap() {
@@ -37,6 +39,7 @@ async function bootstrap() {
         <PersonalCatalogManagerV2Enhancer />
         <PersonalWorkAssociationEnhancer />
         <PersonalKnowledgeDetailsEnhancer />
+        <CharacterKnowledgeEnhancer />
         <AIEnrichmentEnhancer />
         <WishlistEnhancer />
         <WishlistWatchedLockEnhancer />
