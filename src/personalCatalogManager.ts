@@ -28,7 +28,7 @@ function safeParse<T>(value: string | null, fallback: T): T {
   try { return JSON.parse(value) as T } catch { return fallback }
 }
 
-function normalizeName(value: string) {
+export function normalizePersonalWorkName(value: string) {
   return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 }
 
@@ -40,7 +40,7 @@ function statusForCategory(category: PersonalCatalogCategory): PersonalWatchStat
 }
 
 function stableSnapshotId(item: PersonalCatalogItem, index: number) {
-  return `snapshot:${item.category}:${item.malId ?? normalizeName(item.anime) || index}`
+  return `snapshot:${item.category}:${item.malId ?? normalizePersonalWorkName(item.anime) || index}`
 }
 
 function snapshotWorks(): ManagedCatalogWork[] {
@@ -79,16 +79,23 @@ export function clearDraftCatalogState() {
 }
 
 function writeLocalState(dynamicWorks: ManagedCatalogWork[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ dynamicWorks: dynamicWorks.map((work) => ({ ...work, pending: false })), savedAt: new Date().toISOString() }))
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ dynamicWorks: dynamicWorks.map((work) => ({ ...work, pending: false, source: 'dynamic' as const })), savedAt: new Date().toISOString() }))
 }
 
-export function listManagedCatalogWorks(): ManagedCatalogWork[] {
-  return [...snapshotWorks(), ...readDynamicCatalogState().dynamicWorks]
+function mergeWorks(dynamicWorks: ManagedCatalogWork[]) {
+  const merged = new Map<string, ManagedCatalogWork>()
+  for (const work of snapshotWorks()) merged.set(work.id, work)
+  for (const work of dynamicWorks) merged.set(work.id, { ...work, source: 'dynamic' })
+  return Array.from(merged.values())
+}
+
+export function listManagedCatalogWorks(draft?: ManagedCatalogWork[]): ManagedCatalogWork[] {
+  return mergeWorks(draft ?? readDynamicCatalogState().dynamicWorks)
 }
 
 export function listManagedCategory(category: PersonalCatalogCategory, draft?: ManagedCatalogWork[]) {
-  const dynamic = draft ?? readDynamicCatalogState().dynamicWorks
-  return [...snapshotWorks().filter((work) => work.category === category), ...dynamic.filter((work) => work.category === category)]
+  return listManagedCatalogWorks(draft)
+    .filter((work) => work.category === category)
     .sort((a, b) => {
       if (category === 'watched') return (a.myRanked ?? Number.MAX_SAFE_INTEGER) - (b.myRanked ?? Number.MAX_SAFE_INTEGER)
       return a.displayName.localeCompare(b.displayName)
@@ -124,24 +131,34 @@ export function normalizeRanks(works: ManagedCatalogWork[]) {
   return works.map((work, index) => ({ ...work, myRanked: index + 1 }))
 }
 
+export function upsertDynamicWork(dynamicWorks: ManagedCatalogWork[], work: ManagedCatalogWork) {
+  const next = new Map(dynamicWorks.map((item) => [item.id, item]))
+  next.set(work.id, { ...work, source: 'dynamic' })
+  return Array.from(next.values())
+}
+
+export function captureCategoryOverrides(dynamicWorks: ManagedCatalogWork[], visibleWorks: ManagedCatalogWork[]) {
+  let next = dynamicWorks
+  for (const work of visibleWorks) next = upsertDynamicWork(next, { ...work, source: 'dynamic' })
+  return next
+}
+
 export function findManagedWorkByMalId(malId: number, draft?: ManagedCatalogWork[]): ManagedCatalogWork | null {
-  const works = [...snapshotWorks(), ...(draft ?? readDynamicCatalogState().dynamicWorks)]
-  return works.find((work) => work.primaryMalId === malId || work.associationMalIds.includes(malId)) ?? null
+  return listManagedCatalogWorks(draft).find((work) => work.primaryMalId === malId || work.associationMalIds.includes(malId)) ?? null
 }
 
 export function findPotentialDuplicate(anime: Anime, displayName: string, draft?: ManagedCatalogWork[]) {
-  const works = [...snapshotWorks(), ...(draft ?? readDynamicCatalogState().dynamicWorks)]
-  const normalized = normalizeName(displayName)
-  return works.find((work) =>
+  const normalized = normalizePersonalWorkName(displayName)
+  return listManagedCatalogWorks(draft).find((work) =>
     work.primaryMalId === anime.malId
     || work.associationMalIds.includes(anime.malId)
-    || normalizeName(work.displayName) === normalized,
+    || normalizePersonalWorkName(work.displayName) === normalized,
   ) ?? null
 }
 
-export function getManagedWatchedMalIds(): Set<number> {
+export function getManagedWatchedMalIds(draft?: ManagedCatalogWork[]): Set<number> {
   const ids = new Set<number>()
-  for (const work of listManagedCatalogWorks()) {
+  for (const work of listManagedCatalogWorks(draft)) {
     if (work.watchStatus !== 'watched') continue
     if (work.primaryMalId != null) ids.add(work.primaryMalId)
     work.associationMalIds.forEach((id) => ids.add(id))
@@ -175,19 +192,17 @@ export function managedWatchedRows(): WatchedAnime[] {
 }
 
 export function associateMalIdLocally(workId: string, malId: number): ManagedCatalogWork[] {
-  const state = readDynamicCatalogState()
-  let foundDynamic = false
-  const dynamicWorks = state.dynamicWorks.map((work) => {
-    if (work.id !== workId) return work
-    foundDynamic = true
-    return { ...work, associationMalIds: Array.from(new Set([...work.associationMalIds, malId])) }
-  })
-  if (!foundDynamic) {
-    const source = snapshotWorks().find((work) => work.id === workId)
-    if (source) dynamicWorks.push({ ...source, id: `${source.id}:override`, source: 'dynamic', associationMalIds: Array.from(new Set([...source.associationMalIds, malId])) })
+  const dynamicWorks = readDynamicCatalogState().dynamicWorks
+  const source = listManagedCatalogWorks(dynamicWorks).find((work) => work.id === workId)
+  if (!source) return dynamicWorks
+  const override: ManagedCatalogWork = {
+    ...source,
+    associationMalIds: Array.from(new Set([...source.associationMalIds, malId])),
+    source: 'dynamic',
   }
-  writeLocalState(dynamicWorks)
-  return dynamicWorks
+  const next = upsertDynamicWork(dynamicWorks, override)
+  writeLocalState(next)
+  return next
 }
 
 async function currentUserId() {
@@ -197,7 +212,7 @@ async function currentUserId() {
 }
 
 export async function saveManagedCatalog(dynamicWorks: ManagedCatalogWork[]): Promise<'supabase' | 'local'> {
-  const clean = dynamicWorks.map((work) => ({ ...work, pending: false }))
+  const clean = dynamicWorks.map((work) => ({ ...work, pending: false, source: 'dynamic' as const }))
   writeLocalState(clean)
   clearDraftCatalogState()
 
@@ -233,10 +248,9 @@ export async function associateExternalEntry(work: ManagedCatalogWork, malId: nu
 }
 
 export async function createAndSaveManagedWork(anime: Anime, displayName: string, category: PersonalCatalogCategory = 'watched') {
-  const existing = listManagedCategory(category).filter((work) => work.source === 'dynamic')
   const rank = category === 'watched' ? listManagedCategory('watched').length + 1 : null
   const work = createManagedWorkFromAnime(anime, displayName, category, rank)
-  const next = [...readDynamicCatalogState().dynamicWorks, work]
+  const next = upsertDynamicWork(readDynamicCatalogState().dynamicWorks, work)
   await saveManagedCatalog(next)
   return work
 }
