@@ -9,6 +9,7 @@ import PersonalKnowledgeDetailsEnhancer from './PersonalKnowledgeDetailsEnhancer
 import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import WishlistWatchedLockEnhancer from './WishlistWatchedLockEnhancer'
+import WorldTriggerKeywordHotfixEnhancer from './WorldTriggerKeywordHotfixEnhancer'
 import EnglishUiPolishEnhancer from './EnglishUiPolishEnhancer'
 import CatalogPdfMenuEnhancer from './CatalogPdfMenuEnhancer'
 import { handleSupabaseAuthCallback } from './authCallback'
@@ -39,6 +40,7 @@ async function bootstrap() {
         <AIEnrichmentEnhancer />
         <WishlistEnhancer />
         <WishlistWatchedLockEnhancer />
+        <WorldTriggerKeywordHotfixEnhancer />
         <EnglishUiPolishEnhancer />
         <CatalogPdfMenuEnhancer />
         <App />
