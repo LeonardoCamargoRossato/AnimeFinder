@@ -18,6 +18,7 @@ import './personal-catalog.css'
 import './personal-catalog-comments.css'
 import './personal-catalog-manager.css'
 import './ai-enrichment.css'
+import './ai-personal-knowledge.css'
 import './analytics.css'
 
 async function bootstrap() {
