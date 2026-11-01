@@ -7,6 +7,7 @@ import { hasLocalKnowledge } from './aiPersonalKnowledge'
 interface OpenKnowledgeDetail {
   workId?: string
   malId?: number | null
+  work?: ManagedCatalogWork
 }
 
 export default function AIEnrichmentEnhancer() {
@@ -17,11 +18,9 @@ export default function AIEnrichmentEnhancer() {
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<OpenKnowledgeDetail>).detail ?? {}
-      const work = detail.workId
-        ? listManagedCatalogWorks().find((item) => item.id === detail.workId) ?? null
-        : detail.malId != null
-          ? findManagedWorkByMalId(Number(detail.malId))
-          : null
+      const work = detail.work
+        ?? (detail.workId ? listManagedCatalogWorks().find((item) => item.id === detail.workId) ?? null : null)
+        ?? (detail.malId != null ? findManagedWorkByMalId(Number(detail.malId)) : null)
       if (work) setSelected(work)
     }
     window.addEventListener('animefinder:open-personal-knowledge', handler)
@@ -72,5 +71,8 @@ export default function AIEnrichmentEnhancer() {
     }
   }, [location.pathname, location.search])
 
-  return selected ? <AIEnrichmentWorkspace work={selected} onClose={() => setSelected(null)} onSaved={() => forceRefresh((value) => value + 1)} /> : null
+  return selected ? <AIEnrichmentWorkspace work={selected} onClose={() => setSelected(null)} onSaved={() => {
+    forceRefresh((value) => value + 1)
+    window.dispatchEvent(new CustomEvent('animefinder:personal-knowledge-updated'))
+  }} /> : null
 }
