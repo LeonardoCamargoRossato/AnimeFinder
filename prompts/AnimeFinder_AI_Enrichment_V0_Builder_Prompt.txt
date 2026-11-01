@@ -1,0 +1,153 @@
+ANIMEFINDER — ENRIQUECER COM IA V0
+AI ENRICHMENT WORKSPACE PARA O CATÁLOGO PESSOAL
+
+Objetivo
+Implementar uma nova funcionalidade chamada “✨ Enriquecer com IA” sem reconstruir o AnimeFinder. Preservar autenticação, Supabase, Personal Catalog, My Watched Anime, My Ranked, Comments, Original Observations, Anime Details, Related Works, Your Analytics, For Nerds, Deep Analysis, Dark/Light, providers e GitHub Pages.
+
+Princípio central
+Cada obra do Personal Catalog deve poder possuir uma camada de conhecimento pessoal estruturado. A IA organiza e sugere; Leonardo confirma. Nenhuma inferência sugerida deve virar evidência definitiva silenciosamente.
+
+Dados V0
+- comentário consolidado;
+- keywords;
+- importância relativa/ranking das keywords;
+- estado suggested/confirmed;
+- personagens destacados;
+- sentimento do personagem: favorite, liked, interesting, disliked, memorable;
+- motivo pessoal do personagem;
+- provenance/source: manual ou ai_suggested;
+- timestamps e indicador de enriquecimento.
+
+Workspace
+Adicionar “✨ Enriquecer com IA” no Personal Catalog e, quando a obra estiver associada por MAL ID, também no Anime Details. Abrir um workspace/modal praticamente em tela cheia, não um chat lateral.
+Desktop: aproximadamente 40% conversa guiada / 60% perfil da obra.
+Mobile: abas Conversa | Perfil ou layout vertical.
+
+Fluxo guiado
+Não criar um ChatGPT genérico. O fluxo precisa ser curto, orientado a extrair e organizar a impressão pessoal daquela obra.
+
+Comments x Original Observations
+- Original Observations é histórico importado e deve permanecer imutável.
+- Comments é o comentário atual e pode evoluir.
+- Ao abrir, carregar Comments primeiro.
+- Se Comments estiver vazio, convidar o usuário a falar ou escrever um comentário inicial.
+- Se Comments existir, mostrar imediatamente e perguntar se deseja complementar.
+
+Áudio/transcrição
+Oferecer botão de microfone pt-BR usando reconhecimento de voz do navegador quando disponível.
+Fluxo: voz → transcrição → proposta de comentário consolidado.
+A proposta nunca substitui silenciosamente o comentário anterior.
+Oferecer manter versão anterior, editar ou usar versão consolidada.
+
+Preservação de significado
+Ao organizar texto, não inventar elogios, críticas ou opiniões. Pode corrigir gramática, remover repetição, melhorar clareza e juntar áudio+texto, mas deve preservar significado.
+
+Keywords
+Extrair apenas características realmente expressas pelo usuário. Exibir como sugestões, nunca como dados confirmados automaticamente.
+Permitir:
+- confirmar;
+- remover;
+- adicionar manualmente;
+- reordenar via drag-and-drop.
+A ordem representa importância relativa naquela obra.
+
+Personagens
+Detectar personagens mencionados quando possível, sem assumir que todo personagem mencionado é favorito.
+Permitir adicionar personagem manualmente pesquisando apenas personagens relacionados ao anime/franquia.
+Cada personagem deve permitir:
+- sentiment: favorite / liked / interesting / disliked / memorable;
+- reason;
+- confirmed;
+- source;
+- character ID quando disponível.
+
+Painel direito V0
+Manter simples, com três cards principais:
+1. Comentário;
+2. Keywords;
+3. Personagens destacados.
+
+Performance
+Abrir workspace imediatamente com dados locais/Supabase.
+Não enviar o catálogo inteiro para a IA.
+Contexto máximo por sessão: obra atual, Comments, Original Observations quando relevante, metadata essencial e personagens apenas quando necessário.
+Usar optimistic UI, cache, requests pequenos, background loading, debounce, cancellation e timeouts.
+
+Arquitetura de IA
+Não expor chave de LLM no frontend.
+Criar uma camada AIEnrichmentService/provider extensível:
+- se VITE_AI_ENRICH_ENDPOINT estiver configurado, chamar endpoint seguro/Edge Function com resposta JSON estruturada;
+- validar a resposta antes de atualizar UI;
+- se não houver endpoint, manter uma camada local assistida capaz de organizar o comentário e extrair sugestões explícitas para que a V0 permaneça testável.
+A troca futura por um LLM não deve exigir reescrever a UI.
+
+Resposta estruturada esperada
+{
+  "suggestedComment": "...",
+  "keywords": [
+    { "name": "Estratégia", "importance": 1, "confirmed": false }
+  ],
+  "characters": [
+    { "characterId": 0, "name": "Osamu Mikumo", "relation": "liked", "reason": "...", "confirmed": false }
+  ]
+}
+
+Persistência Supabase
+Criar estrutura compatível com análise futura:
+- personal_anime_profile
+  - user_id
+  - personal_work_id
+  - mal_id
+  - comment
+  - ai_enriched
+  - last_enriched_at
+- personal_anime_keywords
+  - user_id
+  - personal_work_id
+  - keyword
+  - rank
+  - source
+  - confirmed
+- personal_anime_characters
+  - user_id
+  - personal_work_id
+  - mal_id
+  - character_id
+  - character_name
+  - sentiment
+  - reason
+  - source
+  - confirmed
+  - image_url/role quando disponíveis
+
+Usar RLS e uma operação lógica de save que persista o enriquecimento completo. Se a migração ainda não tiver sido executada, manter fallback local para a UI continuar utilizável.
+
+Salvar
+Botões principais do workspace:
+- Cancelar
+- Salvar enriquecimento
+Ao salvar, persistir apenas o comentário aprovado, keywords confirmadas e ranqueadas, personagens confirmados, sentimentos e motivos.
+Ao cancelar, não sobrescrever dados persistidos.
+
+Indicador
+Depois de uma obra ser enriquecida, mostrar discretamente “✨ Enriched” / “✨ Enriched with AI” sem poluir a tabela.
+
+Futuro
+A modelagem deve permitir consultas quantitativas futuras como frequência de keywords, keyword × My Ranked, personagem/arquetipo × ranking, características do Top 10 e Bottom 20. Não implementar a análise global agora.
+
+Aceitação mínima
+Testar com World Trigger:
+1. abrir “✨ Enriquecer com IA”;
+2. workspace abre imediatamente;
+3. comentário existente aparece, ou é solicitado um comentário inicial;
+4. voz pode gerar transcrição quando o browser suporta;
+5. comentário pode ser consolidado sem overwrite silencioso;
+6. keywords surgem como suggested;
+7. usuário confirma/remove/adiciona/reordena;
+8. personagens podem ser sugeridos ou adicionados manualmente;
+9. usuário define sentiment e reason;
+10. salvar;
+11. reabrir e encontrar os dados persistidos;
+12. indicador de enriquecimento aparece;
+13. mobile funciona;
+14. build GitHub Pages passa.
