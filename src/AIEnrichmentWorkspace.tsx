@@ -52,12 +52,12 @@ function mergeKeywords(existing: KnowledgeKeyword[], suggested: KnowledgeKeyword
 }
 
 function mergeCharacters(existing: CharacterKnowledge[], suggested: CharacterKnowledge[]) {
-  const rows = [...existing]
+  const rows = existing.map((row, index) => ({ ...row, rank: row.rank || index + 1 }))
   for (const suggestion of suggested) {
     const match = rows.find((row) => row.name.toLocaleLowerCase() === suggestion.name.toLocaleLowerCase())
-    if (!match) rows.push(suggestion)
+    if (!match) rows.push({ ...suggestion, rank: rows.length + 1 })
   }
-  return rows
+  return rows.map((row, index) => ({ ...row, rank: index + 1 }))
 }
 
 function KeywordEditor({ keywords, onChange, onSave, saving }: { keywords: KnowledgeKeyword[]; onChange: (rows: KnowledgeKeyword[]) => void; onSave: () => void; saving: boolean }) {
@@ -92,23 +92,36 @@ function KeywordEditor({ keywords, onChange, onSave, saving }: { keywords: Knowl
 }
 
 function CharacterEditor({ characters, onChange, onSave, onEnrich, saving }: { characters: CharacterKnowledge[]; onChange: (rows: CharacterKnowledge[]) => void; onSave: () => void; onEnrich: (id: string) => void; saving: boolean }) {
+  const dragIndex = useRef<number | null>(null)
   const [manual, setManual] = useState('')
+  function normalize(rows: CharacterKnowledge[]) { return rows.map((row, index) => ({ ...row, rank: index + 1 })) }
+  function reorder(target: number) {
+    if (dragIndex.current == null || dragIndex.current === target) return
+    const rows = [...characters]
+    const [moved] = rows.splice(dragIndex.current, 1)
+    rows.splice(target, 0, moved)
+    onChange(normalize(rows))
+    dragIndex.current = null
+  }
   function add() {
     const name = manual.trim()
     if (!name || characters.some((row) => row.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return
-    onChange([...characters, { id: `manual-${Date.now()}`, name, source: 'manual', confirmed: true, commentVersions: [], keywords: [] }])
+    onChange([...characters, { id: `manual-${Date.now()}`, name, rank: characters.length + 1, source: 'manual', confirmed: true, commentVersions: [], keywords: [] }])
     setManual('')
   }
   return <div className="pk-character-editor">
     {characters.length === 0 && <div className="pk-empty">No characters identified yet.</div>}
-    {characters.map((row, index) => <div className={row.confirmed ? 'pk-character-row confirmed' : 'pk-character-row suggested'} key={row.id}>
+    {characters.map((row, index) => <div className={row.confirmed ? 'pk-character-row confirmed' : 'pk-character-row suggested'} key={row.id} draggable onDragStart={() => { dragIndex.current = index }} onDragOver={(event) => event.preventDefault()} onDrop={() => reorder(index)}>
+      <span className="pk-drag" title="Drag to rank">≡</span>
+      <span className="pk-rank">#{index + 1}</span>
       <input value={row.name} onChange={(event) => onChange(characters.map((item, i) => i === index ? { ...item, name: event.target.value } : item))} />
       <small>{row.confirmed ? 'Confirmed' : row.source === 'ai_suggested' ? 'Suggestion' : 'Manual'}</small>
       <button type="button" onClick={() => onChange(characters.map((item, i) => i === index ? { ...item, confirmed: !item.confirmed } : item))}>{row.confirmed ? '✓' : 'Confirm'}</button>
       <button type="button" onClick={() => onEnrich(row.id)} disabled={!row.confirmed}>Enrich</button>
-      <button type="button" aria-label="Remove character" onClick={() => onChange(characters.filter((_, i) => i !== index))}>×</button>
+      <button type="button" aria-label="Remove character" onClick={() => onChange(normalize(characters.filter((_, i) => i !== index)))}>×</button>
     </div>)}
     <div className="pk-inline-add"><input value={manual} onChange={(event) => setManual(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') add() }} placeholder="Add character manually" /><button type="button" onClick={add}>+ Add</button></div>
+    <small className="pk-order-help">Character order represents your personal importance/preference inside this work. Dragging is local until Save characters.</small>
     <button type="button" className="primary-button compact" onClick={onSave} disabled={saving}>{saving ? 'Saving…' : 'Save characters'}</button>
   </div>
 }
@@ -161,7 +174,7 @@ export default function AIEnrichmentWorkspace({ work, onClose, onSaved }: { work
       setCursor(current?.versionNumber ?? 0)
       const localDraft = readDraft(work.id)
       setDraft(localDraft || current?.content || '')
-      setAssistantNote(current ? 'Seu comentário está salvo. O que você quer fazer agora?' : 'Conte o que você achou desta obra. Você pode escrever ou falar.')
+      setAssistantNote(current ? 'Your comment is saved. What would you like to do next?' : 'Tell me what you thought about this work. You can type or speak.')
       setLoading(false)
     })
     return () => { live = false; recognitionRef.current?.stop(); document.body.style.overflow = previous }
@@ -201,12 +214,13 @@ export default function AIEnrichmentWorkspace({ work, onClose, onSaved }: { work
 
   async function persist(next: PersonalKnowledge, note: string) {
     setBusy('structured')
-    const saved = await savePersonalKnowledge(next)
-    setProfile(saved)
-    setStatus(saved.storage === 'supabase' ? note : `${note} Saved locally; run the V1 Supabase migration to sync across devices.`)
-    onSaved(saved, existingComment)
-    setBusy(null)
-    return saved
+    try {
+      const saved = await savePersonalKnowledge(next)
+      setProfile(saved)
+      setStatus(saved.storage === 'supabase' ? note : `${note} Saved locally; run the V2 Supabase migration to sync across devices.`)
+      onSaved(saved, existingComment)
+      return saved
+    } finally { setBusy(null) }
   }
 
   async function saveComment(source: VersionSource = draftSource) {
@@ -219,7 +233,7 @@ export default function AIEnrichmentWorkspace({ work, onClose, onSaved }: { work
       if (work.primaryMalId) comment = await saveAnimeComment(work.primaryMalId, textToHtml(draft.trim()), draft.trim())
       setExistingComment(comment)
       setProfile(saved); setCursor(saved.currentVersionNumber); clearDraft(work.id); setEditing(false); setDraftSource('manual')
-      setAssistantNote('Comentário salvo. O que você quer fazer agora?')
+      setAssistantNote('Comment saved. What would you like to do next?')
       setStatus(`✓ V${saved.currentVersionNumber} saved.`)
       onSaved(saved, comment)
     } finally { setBusy(null) }
@@ -230,20 +244,22 @@ export default function AIEnrichmentWorkspace({ work, onClose, onSaved }: { work
     const next = appendWorkVersion(profile, viewedVersion.content, 'restored')
     const saved = await savePersonalKnowledge(next)
     setProfile(saved); setCursor(saved.currentVersionNumber); setDraft(viewedVersion.content)
-    if (work.primaryMalId) setExistingComment(await saveAnimeComment(work.primaryMalId, textToHtml(viewedVersion.content), viewedVersion.content))
-    setAssistantNote(`V${viewedVersion.versionNumber} foi restaurada como uma nova V${saved.currentVersionNumber}.`)
-    onSaved(saved, existingComment)
+    let comment = existingComment
+    if (work.primaryMalId) comment = await saveAnimeComment(work.primaryMalId, textToHtml(viewedVersion.content), viewedVersion.content)
+    setExistingComment(comment)
+    setAssistantNote(`V${viewedVersion.versionNumber} was restored as a new V${saved.currentVersionNumber}. Later versions remain preserved.`)
+    onSaved(saved, comment)
   }
 
   async function organizeWork() {
     if (!profile || !latestVersion?.content) return
-    setBusy('organize'); setAssistantNote('Organizando seu texto sem alterar o significado…')
+    setBusy('organize'); setAssistantNote('Organizing your text without changing its meaning…')
     try {
       const result = await AIService.organizeComment(latestVersion.content, { workName: work.displayName, originalObservations: work.originalObservations })
-      if (!result.available) { setAssistantNote(result.message ?? 'Organização avançada requer IA.'); return }
+      if (!result.available) { setAssistantNote(result.message ?? 'Advanced organization requires AI.'); return }
       setOrganizedSuggestion(result.data); setSuggestionEditing(false)
-      setAssistantNote('Preparei uma versão organizada do seu comentário. Revise antes de aceitar.')
-    } catch { setAssistantNote('A IA não conseguiu organizar o texto agora. Seu comentário original foi preservado.') }
+      setAssistantNote('I prepared an organized version of your comment. Review it before accepting.')
+    } catch { setAssistantNote('The AI could not organize the text right now. Your original comment was preserved.') }
     finally { setBusy(null) }
   }
 
@@ -252,86 +268,100 @@ export default function AIEnrichmentWorkspace({ work, onClose, onSaved }: { work
     const next = appendWorkVersion(profile, organizedSuggestion.trim(), 'ai_organized')
     const saved = await savePersonalKnowledge(next)
     setProfile(saved); setCursor(saved.currentVersionNumber); setDraft(organizedSuggestion.trim()); setOrganizedSuggestion(null)
-    if (work.primaryMalId) setExistingComment(await saveAnimeComment(work.primaryMalId, textToHtml(organizedSuggestion.trim()), organizedSuggestion.trim()))
-    setAssistantNote(`Versão organizada aceita como V${saved.currentVersionNumber}. A versão anterior continua preservada.`)
-    onSaved(saved, existingComment)
+    let comment = existingComment
+    if (work.primaryMalId) comment = await saveAnimeComment(work.primaryMalId, textToHtml(organizedSuggestion.trim()), organizedSuggestion.trim())
+    setExistingComment(comment)
+    setAssistantNote(`The organized version was accepted as V${saved.currentVersionNumber}. The previous version remains preserved.`)
+    onSaved(saved, comment)
   }
 
   async function identifyKeywords() {
     if (!profile || !latestVersion?.content) return
-    setBusy('keywords'); setAssistantNote('Identificando apenas características presentes no comentário…')
+    setBusy('keywords'); setAssistantNote('Identifying only characteristics supported by your current comment…')
     try {
       const result = await AIService.extractKeywords(latestVersion.content, { workName: work.displayName })
       const next = { ...profile, keywords: mergeKeywords(profile.keywords, result.data) }
       setProfile(next); setTab('profile')
-      setAssistantNote(result.data.length ? `Encontrei ${result.data.length} sugestões. Confirme, remova, edite e ordene no painel Perfil.` : 'Não encontrei palavras-chave confiáveis. Você pode adicioná-las manualmente.')
+      setAssistantNote(result.data.length ? `I found ${result.data.length} keyword suggestions. Confirm, remove, edit and rank them in the Profile panel.` : 'I did not find reliable keywords. You can add them manually.')
       if (result.message) setStatus(result.message)
-    } catch { setAssistantNote('Não foi possível identificar keywords agora.') }
+    } catch { setAssistantNote('Keywords could not be identified right now.') }
     finally { setBusy(null) }
   }
 
   async function identifyCharacters() {
     if (!profile || !latestVersion?.content) return
-    setBusy('characters'); setAssistantNote('Identificando somente nomes mencionados no seu comentário…')
+    setBusy('characters'); setAssistantNote('Identifying only character names mentioned in your current comment…')
     try {
       const result = await AIService.extractCharacters(latestVersion.content, { workName: work.displayName })
       const next = { ...profile, characters: mergeCharacters(profile.characters, result.data) }
       setProfile(next); setTab('profile')
-      setAssistantNote(result.data.length ? `Encontrei ${result.data.length} possíveis personagens. Corrija e confirme antes de salvar.` : 'Não encontrei personagens com confiança. Você pode adicioná-los manualmente.')
+      setAssistantNote(result.data.length ? `I found ${result.data.length} possible characters. Correct, confirm and rank them before saving.` : 'I did not find characters with enough confidence. You can add them manually.')
       if (result.message) setStatus(result.message)
-    } catch { setAssistantNote('Não foi possível identificar personagens agora.') }
+    } catch { setAssistantNote('Characters could not be identified right now.') }
     finally { setBusy(null) }
   }
 
   async function saveKeywords() {
     if (!profile) return
     await persist({ ...profile, keywords: profile.keywords.map((row, index) => ({ ...row, rank: index + 1 })) }, '✓ Keywords saved.')
-    setAssistantNote('Keywords salvas. Quer identificar personagens ou voltar ao comentário?')
+    setAssistantNote('Keywords saved. You can identify characters or return to the comment.')
   }
   async function saveCharacters() {
     if (!profile) return
-    await persist(profile, '✓ Characters saved.')
-    setAssistantNote('Personagens salvos. Você pode enriquecer um personagem ou finalizar.')
+    const next = { ...profile, characters: profile.characters.map((row, index) => ({ ...row, rank: index + 1 })) }
+    await persist(next, '✓ Characters saved.')
+    setAssistantNote('Characters saved. You can enrich a character or finish this session.')
   }
 
-  function focusCharacter(id: string) {
+  function focusCharacter(characterId: string) {
     if (!profile) return
-    const row = profile.characters.find((item) => item.id === id)
+    const row = profile.characters.find((item) => item.id === characterId)
     if (!row) return
-    setCharacterFocus(id); setCharacterDraft(readDraft(`${work.id}:character:${id}`) || row.commentVersions.at(-1)?.content || ''); setCharacterEditing(!row.commentVersions.length); setCharacterSuggestion(null); setTab('conversation')
-    setAssistantNote(`O que você acha do ${row.name}? Você pode escrever ou falar.`)
+    setCharacterFocus(characterId); setCharacterDraft(readDraft(`${work.id}:character:${characterId}`) || row.commentVersions.at(-1)?.content || ''); setCharacterEditing(!row.commentVersions.length); setCharacterSuggestion(null); setTab('conversation')
+    setAssistantNote(`What do you think about ${row.name}? You can type or speak.`)
   }
 
   async function saveCharacterComment(source: VersionSource = 'manual') {
     if (!profile || !character || !characterDraft.trim()) return
     setBusy('character')
-    const next = appendCharacterVersion(profile, character.id, characterDraft.trim(), source)
-    const saved = await savePersonalKnowledge(next)
-    clearDraft(`${work.id}:character:${character.id}`); setProfile(saved); setCharacterEditing(false); setAssistantNote(`Comentário sobre ${character.name} salvo. Quer organizar o texto ou identificar keywords desse personagem?`); setBusy(null); onSaved(saved, existingComment)
+    try {
+      const next = appendCharacterVersion(profile, character.id, characterDraft.trim(), source)
+      const saved = await savePersonalKnowledge(next)
+      clearDraft(`${work.id}:character:${character.id}`); setProfile(saved); setCharacterEditing(false); setAssistantNote(`Your comment about ${character.name} was saved. You can organize it or identify character keywords.`); onSaved(saved, existingComment)
+    } finally { setBusy(null) }
   }
 
   async function organizeCharacter() {
     if (!characterLatest?.content || !character) return
     setBusy('character')
-    const result = await AIService.organizeCharacterComment(characterLatest.content, character.name, work.displayName)
-    if (!result.available) setAssistantNote(result.message ?? 'Organização avançada requer IA.')
-    else { setCharacterSuggestion(result.data); setAssistantNote(`Preparei uma versão organizada do comentário sobre ${character.name}.`) }
-    setBusy(null)
+    try {
+      const result = await AIService.organizeCharacterComment(characterLatest.content, character.name, work.displayName)
+      if (!result.available) setAssistantNote(result.message ?? 'Advanced organization requires AI.')
+      else { setCharacterSuggestion(result.data); setAssistantNote(`I prepared an organized version of your comment about ${character.name}.`) }
+    } finally { setBusy(null) }
   }
 
   async function acceptCharacterSuggestion() {
     if (!profile || !character || !characterSuggestion?.trim()) return
     const next = appendCharacterVersion(profile, character.id, characterSuggestion.trim(), 'ai_organized')
     const saved = await savePersonalKnowledge(next)
-    setProfile(saved); setCharacterDraft(characterSuggestion.trim()); setCharacterSuggestion(null); setAssistantNote(`Nova versão do comentário de ${character.name} salva.`); onSaved(saved, existingComment)
+    setProfile(saved); setCharacterDraft(characterSuggestion.trim()); setCharacterSuggestion(null); setAssistantNote(`A new version of your ${character.name} comment was saved.`); onSaved(saved, existingComment)
   }
 
   async function characterKeywords() {
     if (!profile || !character || !characterLatest?.content) return
     setBusy('character')
-    const result = await AIService.extractCharacterKeywords(characterLatest.content, character.name)
-    const next = { ...profile, characters: profile.characters.map((row) => row.id === character.id ? { ...row, keywords: mergeKeywords(row.keywords, result.data) } : row) }
-    setProfile(next); setTab('profile'); setAssistantNote(`Keywords de ${character.name} prontas para revisão.`); if (result.message) setStatus(result.message); setBusy(null)
+    try {
+      const result = await AIService.extractCharacterKeywords(characterLatest.content, character.name)
+      const next = { ...profile, characters: profile.characters.map((row) => row.id === character.id ? { ...row, keywords: mergeKeywords(row.keywords, result.data) } : row) }
+      setProfile(next); setTab('profile'); setAssistantNote(`${character.name} keywords are ready for review.`); if (result.message) setStatus(result.message)
+    } finally { setBusy(null) }
+  }
+
+  async function saveCharacterKeywords(characterId: string, keywords: KnowledgeKeyword[]) {
+    if (!profile) return
+    const next = { ...profile, characters: profile.characters.map((row) => row.id === characterId ? { ...row, keywords: keywords.map((keyword, index) => ({ ...keyword, rank: index + 1 })) } : row) }
+    await persist(next, `✓ Character keywords saved.`)
   }
 
   if (loading || !profile) return createPortal(<div className="ai-enrichment-backdrop"><div className="ai-enrichment-loading"><span className="spinner" /><strong>Opening Personal Knowledge…</strong></div></div>, document.body)
@@ -339,7 +369,7 @@ export default function AIEnrichmentWorkspace({ work, onClose, onSaved }: { work
   return createPortal(<div className="ai-enrichment-backdrop">
     <section className="ai-enrichment-workspace pk-workspace" role="dialog" aria-modal="true" aria-label={`AI Personal Knowledge — ${work.displayName}`}>
       <header className="ai-enrichment-header"><div><span className="eyebrow">AI PERSONAL KNOWLEDGE</span><h1>{character ? `${work.displayName} · ${character.name}` : work.displayName}</h1></div><div><span className="ai-enrichment-title">Guided knowledge editor</span><button type="button" onClick={onClose} aria-label="Close">×</button></div></header>
-      <div className="ai-mobile-tabs"><button className={tab === 'conversation' ? 'active' : ''} onClick={() => setTab('conversation')}>Conversa</button><button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>Perfil</button></div>
+      <div className="ai-mobile-tabs"><button className={tab === 'conversation' ? 'active' : ''} onClick={() => setTab('conversation')}>Conversation</button><button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>Profile</button></div>
 
       <div className="ai-enrichment-body pk-body">
         <aside className={tab === 'conversation' ? 'ai-conversation pk-chat active' : 'ai-conversation pk-chat'}>
@@ -348,34 +378,34 @@ export default function AIEnrichmentWorkspace({ work, onClose, onSaved }: { work
           {!character && <>
             {viewedVersion && <div className="pk-message user"><div className="pk-user-bubble" onClick={() => { if (cursor === profile.versions.at(-1)?.versionNumber) { setDraft(viewedVersion.content); setEditing(true) } }}>
               {editing && cursor === profile.versions.at(-1)?.versionNumber ? <textarea autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onClick={(event) => event.stopPropagation()} /> : <p>{viewedVersion.content}</p>}
-              <small>Você · V{viewedVersion.versionNumber}</small>
+              <small>You · V{viewedVersion.versionNumber}</small>
             </div></div>}
-            {!viewedVersion && <div className="pk-message user"><div className="pk-user-bubble empty" onClick={() => setEditing(true)}>{editing ? <textarea autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onClick={(event) => event.stopPropagation()} placeholder="Escreva o que você achou…" /> : <p>Clique para escrever seu primeiro comentário.</p>}<small>Você · novo comentário</small></div></div>}
+            {!viewedVersion && <div className="pk-message user"><div className="pk-user-bubble empty" onClick={() => setEditing(true)}>{editing ? <textarea autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onClick={(event) => event.stopPropagation()} placeholder="Write what you thought…" /> : <p>Click to write your first comment.</p>}<small>You · new comment</small></div></div>}
 
             <VersionNav versions={profile.versions} cursor={cursor} onCursor={(version) => { setCursor(version); setEditing(false); setOrganizedSuggestion(null) }} onRestore={restoreVersion} />
 
             {editing && cursor === (profile.versions.at(-1)?.versionNumber ?? cursor) && <div className="pk-compose-actions">
-              <button type="button" className={recording ? 'ghost-button recording' : 'ghost-button'} onClick={() => recording ? stopSpeech() : startSpeech('work')}>{recording ? '■ Stop' : '🎙️ Falar'}</button>
+              <button type="button" className={recording ? 'ghost-button recording' : 'ghost-button'} onClick={() => recording ? stopSpeech() : startSpeech('work')}>{recording ? '■ Stop' : '🎙️ Speak'}</button>
               <button type="button" className="primary-button" onClick={() => void saveComment()} disabled={!draft.trim() || busy === 'save'}>{busy === 'save' ? 'Saving…' : 'Save new version'}</button>
               <button type="button" className="text-button" onClick={() => { setEditing(false); setDraft(latestVersion?.content ?? '') }}>Cancel edit</button>
             </div>}
             {speechUnavailable && <div className="pk-inline-warning">Speech recognition is not available in this browser.</div>}
 
-            {organizedSuggestion && <div className="pk-message assistant"><span className="pk-avatar">AI</span><div className="pk-suggestion"><strong>Organized suggestion</strong>{suggestionEditing ? <textarea value={organizedSuggestion} onChange={(event) => setOrganizedSuggestion(event.target.value)} /> : <p>{organizedSuggestion}</p>}<div><button className="primary-button compact" type="button" onClick={acceptOrganized}>✓ Use this version</button><button className="ghost-button compact" type="button" onClick={() => setSuggestionEditing(true)}>✏️ Edit</button><button className="text-button" type="button" onClick={() => { setOrganizedSuggestion(null); setAssistantNote('Seu texto original foi mantido.') }}>✕ Keep my text</button></div></div></div>}
+            {organizedSuggestion && <div className="pk-message assistant"><span className="pk-avatar">AI</span><div className="pk-suggestion"><strong>Organized suggestion</strong>{suggestionEditing ? <textarea value={organizedSuggestion} onChange={(event) => setOrganizedSuggestion(event.target.value)} /> : <p>{organizedSuggestion}</p>}<div><button className="primary-button compact" type="button" onClick={acceptOrganized}>✓ Use this version</button><button className="ghost-button compact" type="button" onClick={() => setSuggestionEditing(true)}>✏️ Edit</button><button className="text-button" type="button" onClick={() => { setOrganizedSuggestion(null); setAssistantNote('Your original text was kept.') }}>✕ Keep my text</button></div></div></div>}
 
-            {latestVersion && !editing && !organizedSuggestion && <div className="pk-context-actions"><span>What do you want to do?</span><button type="button" onClick={organizeWork} disabled={Boolean(busy)}>✨ Organizar texto com IA</button><button type="button" onClick={identifyKeywords} disabled={Boolean(busy)}>🏷️ Identificar palavras-chave</button><button type="button" onClick={identifyCharacters} disabled={Boolean(busy)}>👤 Identificar personagens</button></div>}
+            {latestVersion && !editing && !organizedSuggestion && <div className="pk-context-actions"><span>What do you want to do?</span><button type="button" onClick={organizeWork} disabled={Boolean(busy)}>✨ Organize text with AI</button><button type="button" onClick={identifyKeywords} disabled={Boolean(busy)}>🏷️ Identify keywords</button><button type="button" onClick={identifyCharacters} disabled={Boolean(busy)}>👤 Identify characters</button></div>}
           </>}
 
           {character && <>
-            <button type="button" className="text-button pk-back" onClick={() => { setCharacterFocus(null); setCharacterSuggestion(null); setAssistantNote('Comentário da obra novamente em foco.') }}>← Back to work</button>
-            <div className="pk-message assistant"><span className="pk-avatar">AI</span><div><p>O que você acha do {character.name}?</p></div></div>
+            <button type="button" className="text-button pk-back" onClick={() => { setCharacterFocus(null); setCharacterSuggestion(null); setAssistantNote('The work comment is in focus again.') }}>← Back to work</button>
+            <div className="pk-message assistant"><span className="pk-avatar">AI</span><div><p>What do you think about {character.name}?</p></div></div>
             <div className="pk-message user"><div className="pk-user-bubble" onClick={() => { setCharacterDraft(characterLatest?.content ?? ''); setCharacterEditing(true) }}>
-              {characterEditing ? <textarea autoFocus value={characterDraft} onChange={(event) => { setCharacterDraft(event.target.value); writeDraft(`${work.id}:character:${character.id}`, event.target.value) }} onClick={(event) => event.stopPropagation()} placeholder={`Escreva sobre ${character.name}…`} /> : <p>{characterLatest?.content || 'Clique para adicionar um comentário pessoal.'}</p>}
-              <small>Você · {characterLatest ? `V${characterLatest.versionNumber}` : 'novo comentário'}</small>
+              {characterEditing ? <textarea autoFocus value={characterDraft} onChange={(event) => { setCharacterDraft(event.target.value); writeDraft(`${work.id}:character:${character.id}`, event.target.value) }} onClick={(event) => event.stopPropagation()} placeholder={`Write about ${character.name}…`} /> : <p>{characterLatest?.content || 'Click to add a personal comment.'}</p>}
+              <small>You · {characterLatest ? `V${characterLatest.versionNumber}` : 'new comment'}</small>
             </div></div>
-            {characterEditing && <div className="pk-compose-actions"><button className={recording ? 'ghost-button recording' : 'ghost-button'} type="button" onClick={() => recording ? stopSpeech() : startSpeech('character')}>{recording ? '■ Stop' : '🎙️ Falar'}</button><button className="primary-button" type="button" onClick={() => saveCharacterComment()} disabled={!characterDraft.trim() || Boolean(busy)}>Save character version</button></div>}
+            {characterEditing && <div className="pk-compose-actions"><button className={recording ? 'ghost-button recording' : 'ghost-button'} type="button" onClick={() => recording ? stopSpeech() : startSpeech('character')}>{recording ? '■ Stop' : '🎙️ Speak'}</button><button className="primary-button" type="button" onClick={() => saveCharacterComment()} disabled={!characterDraft.trim() || Boolean(busy)}>Save character version</button></div>}
             {characterSuggestion && <div className="pk-message assistant"><span className="pk-avatar">AI</span><div className="pk-suggestion"><strong>Organized suggestion</strong><p>{characterSuggestion}</p><div><button className="primary-button compact" onClick={acceptCharacterSuggestion}>✓ Use this version</button><button className="text-button" onClick={() => setCharacterSuggestion(null)}>Keep my text</button></div></div></div>}
-            {characterLatest && !characterEditing && !characterSuggestion && <div className="pk-context-actions"><button type="button" onClick={organizeCharacter} disabled={Boolean(busy)}>✨ Organizar texto com IA</button><button type="button" onClick={characterKeywords} disabled={Boolean(busy)}>🏷️ Identificar keywords</button></div>}
+            {characterLatest && !characterEditing && !characterSuggestion && <div className="pk-context-actions"><button type="button" onClick={organizeCharacter} disabled={Boolean(busy)}>✨ Organize text with AI</button><button type="button" onClick={characterKeywords} disabled={Boolean(busy)}>🏷️ Identify keywords</button></div>}
           </>}
 
           {status && <div className="pk-status">{status}</div>}
@@ -387,8 +417,8 @@ export default function AIEnrichmentWorkspace({ work, onClose, onSaved }: { work
 
           <section className="ai-profile-card"><div className="ai-profile-card-title"><div><span>KEYWORDS</span><strong>Personal signals</strong></div><small>{profile.keywords.filter((row) => row.confirmed).length} confirmed</small></div><KeywordEditor keywords={profile.keywords} onChange={(keywords) => setProfile({ ...profile, keywords })} onSave={saveKeywords} saving={busy === 'structured'} /></section>
 
-          <section className="ai-profile-card"><div className="ai-profile-card-title"><div><span>CHARACTERS</span><strong>Personal character knowledge</strong></div><small>No external character API</small></div><CharacterEditor characters={profile.characters} onChange={(characters) => setProfile({ ...profile, characters })} onSave={saveCharacters} onEnrich={focusCharacter} saving={busy === 'structured'} />
-            {profile.characters.filter((row) => row.confirmed).map((row) => <article key={`summary-${row.id}`} className="pk-character-summary"><button type="button" onClick={() => focusCharacter(row.id)}><strong>{row.name}</strong><span>{row.keywords.filter((keyword) => keyword.confirmed).length} keywords · {row.commentVersions.length ? '✓ Enriched' : 'No comment yet'}</span></button>{row.keywords.length > 0 && <KeywordEditor keywords={row.keywords} onChange={(keywords) => setProfile({ ...profile, characters: profile.characters.map((item) => item.id === row.id ? { ...item, keywords } : item) })} onSave={() => persist(profile, `✓ ${row.name} keywords saved.`)} saving={busy === 'structured'} />}</article>)}
+          <section className="ai-profile-card"><div className="ai-profile-card-title"><div><span>CHARACTERS</span><strong>Personal character ranking</strong></div><small>{profile.characters.filter((row) => row.confirmed).length} confirmed</small></div><CharacterEditor characters={profile.characters} onChange={(characters) => setProfile({ ...profile, characters })} onSave={saveCharacters} onEnrich={focusCharacter} saving={busy === 'structured'} />
+            {profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank).map((row) => <article key={`summary-${row.id}`} className="pk-character-summary"><button type="button" onClick={() => focusCharacter(row.id)}><strong>#{row.rank} {row.name}</strong><span>{row.keywords.filter((keyword) => keyword.confirmed).length} keywords · {row.commentVersions.length ? '✓ Enriched' : 'No comment yet'}</span></button>{row.keywords.length > 0 && <KeywordEditor keywords={row.keywords} onChange={(keywords) => setProfile({ ...profile, characters: profile.characters.map((item) => item.id === row.id ? { ...item, keywords } : item) })} onSave={() => saveCharacterKeywords(row.id, row.keywords)} saving={busy === 'structured'} />}</article>)}
           </section>
         </main>
       </div>
