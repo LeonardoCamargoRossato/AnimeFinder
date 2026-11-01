@@ -1,0 +1,419 @@
+ANIMEFINDER — ANALYTICS V0
+YOUR ANALYTICS + FOR NERDS SUMMARY + DEEP ANALYSIS PAGE
+
+Upgrade the existing AnimeFinder Anime Details architecture.
+
+DO NOT rebuild the application.
+
+Preserve:
+- Authentication
+- Supabase
+- Discover
+- Personal Catalog
+- Watched state
+- Anime Details
+- Related Works
+- Franchise Average
+- Synopsis
+- Dark / Light themes
+- Existing provider architecture
+- GitHub Pages compatibility
+
+OBJECTIVE
+Introduce a lightweight analytics layer into each Anime Details page while creating a separate view for advanced/heavy analytics. Anime Details must remain fast. Heavy analytics, geographic datasets, large franchise graphs and future multi-source market datasets must load only after the user explicitly opens Deep Analysis.
+
+==================================================
+1. ANIME DETAILS STRUCTURE
+==================================================
+The Anime Details page should follow:
+1. Anime Overview
+2. Synopsis
+3. Related Works
+4. Your Analytics
+5. For Nerds — Advanced Database
+6. Deep Analysis button
+
+Do not remove or break existing Details V2 functionality.
+
+==================================================
+2. YOUR ANALYTICS
+==================================================
+Create a section before For Nerds called “Your Analytics”.
+It uses Leonardo's private AnimeFinder catalog data and must remain visually distinct from public MAL statistics.
+
+Prioritize reliable currently available metrics:
+- Watched status
+- My Ranked position
+- Personal ranking percentile
+- Original observations
+- Personal comments
+- Franchise completion
+- Related/franchise works already watched
+
+When sufficient cached metadata exists, architecture may later support:
+- Studio affinity
+- Director affinity
+- Creator / Mangaka affinity
+- Similar watched works
+
+Do not scan the entire watched catalog with dozens/hundreds of API calls during normal Anime Details load. Only show affinity metrics when enough cached data exists.
+
+If a watched anime has My Ranked, show conceptually:
+✓ Watched
+My Ranking: #3 of N
+Top: 2.1%
+Original Observation: ...
+Comments: ...
+
+N must be calculated dynamically from the Personal Catalog. Never hardcode the catalog size.
+
+==================================================
+3. FOR NERDS — ADVANCED DATABASE
+==================================================
+Keep “For Nerds” and the subtitle/concept “Advanced Database”.
+This must be compact: roughly “20 technical facts / indicators at a glance”, not a huge research page.
+
+Support these 20 indicator categories with explicit states:
+1. Director
+2. Original Creator / Mangaka
+3. Main Voice Cast
+4. Animation Studio
+5. Production Staff
+6. Original Source
+7. Publisher / Magazine
+8. Manga Volumes / Chapters
+9. Manga Sales
+10. Total Circulation
+11. Sales Evolution
+12. Anime Effect on Source Sales
+13. MAL Statistics
+14. Franchise Score Timeline
+15. International Distribution
+16. Brazil Availability / Distribution
+17. Streaming Availability
+18. Movie Box Office
+19. Awards & Nominations
+20. Franchise Analytics
+
+Every indicator supports:
+- available
+- partial
+- unavailable
+- loading
+- error
+- timeout
+
+Never fabricate missing information. Use “No reliable data” when unsupported.
+One failed provider/source must not block the whole dashboard.
+
+Group indicators compactly, for example:
+PRODUCTION: Director, Creator, Studio, Source, Publisher, Staff, Cast
+MANGA: Volumes, Circulation, Sales, Sales Evolution, Anime Effect
+AUDIENCE / MARKET: MAL Rank, Popularity, Members, Favorites, Distribution, Streaming, Box Office
+FRANCHISE: Franchise Average, Score Range, Highest/Lowest, Timeline
+
+==================================================
+4. MINI FRANCHISE SCORE TIMELINE
+==================================================
+Inside For Nerds add a small lightweight Franchise Score Timeline.
+Use Related Works data already loaded by AnimeFinder.
+Do not make new provider requests when existing franchise data already contains title/year/MAL score.
+X-axis: chronological franchise entries.
+Y-axis: MAL score.
+Missing scores are ignored, not treated as zero.
+
+==================================================
+5. DEEP ANALYSIS
+==================================================
+At the bottom of For Nerds add a prominent “Deep Analysis” action with subtitle:
+“Advanced charts, markets, franchise and global analytics”.
+
+This opens a dedicated analytics view for the selected MAL ID.
+The implementation must remain GitHub Pages compatible.
+The heavy analytics view must not load until the user explicitly opens it.
+
+Header:
+[poster]
+Anime Title
+Deep Analysis
+Advanced franchise, audience and market analytics
+Provide a clear return action to Anime Details.
+
+==================================================
+6. DEEP ANALYSIS SECTIONS
+==================================================
+Create six major sections:
+1. Franchise Analytics
+2. Production & People
+3. Source & Manga
+4. Audience Analytics
+5. Business & Markets
+6. Global Footprint
+
+Partial/no-data states are acceptable and preferred over invented data.
+
+==================================================
+7. FRANCHISE ANALYTICS
+==================================================
+Use the existing Related Works / Franchise graph whenever possible.
+Calculate only from valid MAL scores:
+- Franchise Average
+- Highest Rated Entry
+- Lowest Rated Entry
+- Score Range
+- Standard Deviation
+- Number of Related Works
+- Chronological Score Timeline
+
+Do not count missing scores as zero.
+
+Add a larger responsive interactive Score Timeline.
+
+==================================================
+8. FRANCHISE MAP
+==================================================
+Create a simple responsive relationship visualization based on MAL IDs and known structured relations.
+Conceptually:
+Original Source → Anime S1 → Anime S2 → Movie / OVA / Spin-off
+
+Reuse the existing franchise relationship data and caches.
+Nodes should be architected for navigation/clicking.
+Do not generate relationships from title-string similarity.
+
+==================================================
+9. PRODUCTION & PEOPLE
+==================================================
+Use reliable structured metadata when available:
+- Directors
+- Creators
+- Mangaka
+- Writers
+- Character designers
+- Music composers
+- Studios
+- Producers
+- Voice actors
+
+The architecture should later support exploring a person and their works.
+Do not fabricate missing staff information.
+
+==================================================
+10. SOURCE & MANGA
+==================================================
+Prepare adapters / UI states for:
+- Original manga/light novel
+- Publisher
+- Magazine
+- Volumes
+- Chapters
+- Publication status
+- Serialization dates
+- Copies sold
+- Circulation
+- Sales by year
+- Sales by volume
+
+IMPORTANT: sales and circulation are different metrics. Never label circulation as confirmed copies sold.
+
+==================================================
+11. ANIME EFFECT
+==================================================
+Prepare an AnimeFinder metric called “Anime Effect”.
+Future goal: evaluate whether anime adaptation timing correlates with increased source-material sales/popularity.
+Only calculate if reliable before/after historical data exists.
+Otherwise display exactly/conceptually:
+“Historical sales data required.”
+
+==================================================
+12. AUDIENCE ANALYTICS
+==================================================
+Use MAL-like statistics already available:
+- Score
+- MAL Rank
+- Popularity Rank
+- Members
+- Favorites
+
+Derived metrics are allowed only when mathematically valid, such as franchise score dispersion and highest/lowest related scores.
+Never confuse MAL Rank, Popularity Rank and Score.
+
+==================================================
+13. BUSINESS & MARKETS
+==================================================
+Prepare multi-provider-friendly architecture for:
+- Manga sales
+- Circulation
+- Box office
+- International licensing
+- Streaming distribution
+- Regional publishers
+- Commercial franchise indicators
+
+Do not tightly couple future market analytics to MAL.
+
+==================================================
+14. GLOBAL FOOTPRINT V0
+==================================================
+Create the architecture for a country-level Global Footprint view.
+Future regional fields can include:
+countryCode
+countryName
+popularity
+officialDistribution
+streamingAvailable
+mangaPublished
+boxOffice
+searchInterest
+sources[]
+
+Do not fabricate geographic values.
+No Data is not zero popularity.
+
+If no reliable country-level dataset exists in V0, render a neutral world/global placeholder and a layer selector architecture for:
+- Popularity
+- Distribution
+- Streaming
+- Publishing
+- Box Office
+- Search Interest
+
+Only enable layers when real data exists.
+
+==================================================
+15. PROVENANCE
+==================================================
+Advanced metrics should be architected around provenance, conceptually:
+MetricValue {
+  value
+  source
+  sourceUrl
+  retrievedAt
+  confidence
+}
+
+RegionalMetric {
+  countryCode
+  metric
+  value
+  year
+  source
+  sourceUrl
+}
+
+The UI may expose provenance through a small “ⓘ Source” interaction.
+
+==================================================
+16. SERVICE ARCHITECTURE
+==================================================
+Keep orchestration outside React components where practical.
+Preferred conceptual flow:
+AnimeProvider
+→ AnimeDetailsService
+→ FranchiseService
+→ AnalyticsService
+→ NerdDataService
+→ RegionalDataService
+
+Reuse existing provider caches by MAL ID.
+Do not re-request director, staff, relations, scores or studio when already cached.
+
+==================================================
+17. PROGRESSIVE LOADING + TIMEOUTS
+==================================================
+Anime Details stays lightweight.
+Deep Analysis loads progressively:
+Priority 1: existing AnimeFinder data
+Priority 2: franchise calculations
+Priority 3: production metadata
+Priority 4: market data
+Priority 5: regional/global data
+
+Each section renders independently.
+Use Promise.allSettled() or equivalent where useful.
+One provider failure must not break the page.
+No endless loaders.
+Every provider path must resolve to success, partial, empty, error or timeout.
+
+==================================================
+18. MOBILE / THEMES
+==================================================
+Preserve Dark and Light themes.
+Anime Details remains compact on mobile.
+For Nerds uses stacked compact groups.
+Deep Analysis charts are responsive and may horizontally scroll when necessary.
+Global Footprint architecture must be touch-friendly.
+
+==================================================
+19. V0 PHILOSOPHY
+==================================================
+Do not attempt to perfectly populate all 20 indicators in this iteration.
+Prioritize:
+1. architecture
+2. reliability
+3. performance
+4. available data
+5. visual structure
+
+A working partial dashboard is better than a fake complete dashboard.
+
+High-priority functional fields:
+- Director
+- Creator
+- Studio
+- Source
+- Main Staff
+- Main Voice Cast
+- MAL Score
+- MAL Rank
+- MAL Popularity
+- Members
+- Favorites
+- Related Works
+- Franchise Average
+- Highest Rated Work
+- Lowest Rated Work
+- Franchise Score Timeline
+- Number of franchise entries
+- My Ranked
+- Watched status
+- basic Your Analytics
+
+==================================================
+20. ACCEPTANCE TEST
+==================================================
+Test primarily with Sword Art Online (MAL 11757).
+
+Anime Details must show:
+- Overview
+- Synopsis
+- Related Works
+- Your Analytics
+- For Nerds
+- Deep Analysis button
+
+Your Analytics must recognize Sword Art Online as watched when present in the Personal Catalog.
+For Nerds must remain compact.
+The mini Score Timeline must reuse Related Works data.
+
+Opening Deep Analysis must produce a dedicated advanced view containing:
+- Franchise Analytics
+- Production & People
+- Source & Manga
+- Audience Analytics
+- Business & Markets
+- Global Footprint
+
+Partial / No reliable data states are valid.
+No fabricated data.
+No endless loading.
+Do not load Deep Analysis datasets before the user opens Deep Analysis.
+
+Finally verify:
+- Dark theme
+- Light theme
+- Desktop
+- Mobile
+- GitHub Pages build
+- direct-view compatibility
+- back navigation
+- all existing AnimeFinder functionality preserved
