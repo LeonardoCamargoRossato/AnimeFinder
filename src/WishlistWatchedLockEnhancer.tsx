@@ -15,18 +15,19 @@ export default function WishlistWatchedLockEnhancer() {
         if (!actions) return
         const watchedButton = actions.querySelector('.watched-primary') as HTMLButtonElement | null
         const wishlistButton = actions.querySelector('.wishlist-trigger') as HTMLButtonElement | null
-        const picker = actions.querySelector('.wishlist-picker') as HTMLElement | null
         if (!wishlistButton) return
 
         const locked = Boolean(watchedButton && watchedButton.textContent?.includes('Watched'))
-        if (locked) {
+        const alreadyLocked = wishlistButton.dataset.watchedLocked === 'true'
+
+        if (locked && !alreadyLocked) {
           wishlistButton.disabled = true
           wishlistButton.dataset.watchedLocked = 'true'
           wishlistButton.textContent = '🔒 Want to Watch'
           wishlistButton.title = 'Already watched — this anime cannot be added to Want to Watch.'
           wishlistButton.classList.add('watched-locked')
-          picker?.remove()
-        } else if (wishlistButton.dataset.watchedLocked === 'true') {
+          actions.querySelector('.wishlist-picker')?.remove()
+        } else if (!locked && alreadyLocked) {
           wishlistButton.disabled = false
           delete wishlistButton.dataset.watchedLocked
           wishlistButton.textContent = wishlistButton.classList.contains('active') ? '✓ Want to Watch' : '+ Want to Watch'
