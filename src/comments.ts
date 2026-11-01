@@ -23,13 +23,14 @@ function writeLocal(rows: Record<string, Omit<AnimeComment, 'malId' | 'storage'>
 }
 
 function localComments(): AnimeComment[] {
-  return Object.entries(readLocal()).map(([malId, value]) => ({
+  const rows: AnimeComment[] = Object.entries(readLocal()).map(([malId, value]) => ({
     malId: Number(malId),
     contentHtml: value.contentHtml ?? '',
     contentText: value.contentText ?? '',
     updatedAt: value.updatedAt ?? null,
-    storage: 'local',
-  })).filter((row) => Number.isFinite(row.malId))
+    storage: 'local' as const,
+  }))
+  return rows.filter((row) => Number.isFinite(row.malId))
 }
 
 function saveLocal(comment: Omit<AnimeComment, 'storage'>): AnimeComment {
