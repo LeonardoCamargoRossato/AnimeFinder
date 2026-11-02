@@ -1,0 +1,110 @@
+.pk-dynamic-assistant-hidden {
+  display: none !important;
+}
+
+.pk-conversation-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.pk-conversation-replies .pk-message.assistant {
+  align-self: flex-start;
+}
+
+.pk-version-edit-button {
+  min-width: 36px !important;
+  width: 36px;
+  padding: 0 !important;
+  font-size: 17px !important;
+  color: var(--accent) !important;
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border)) !important;
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent) 12%) !important;
+}
+
+.pk-version-edit-button:hover,
+.pk-version-edit-button:focus-visible {
+  border-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--surface) 76%, var(--accent) 24%) !important;
+  outline: none;
+}
+
+.pk-comment-editable-card > p {
+  cursor: text;
+  border-radius: 10px;
+  transition: background .16s ease, box-shadow .16s ease;
+}
+
+.pk-comment-editable-card > p:hover {
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.pk-comment-edit-button {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  margin-left: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent) 12%);
+  color: var(--accent);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 900;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.pk-comment-edit-button:hover,
+.pk-comment-edit-button:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 76%, var(--accent) 24%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: none;
+}
+
+.pk-comment-display-hidden {
+  display: none !important;
+}
+
+.pk-comment-inline-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.pk-comment-inline-editor textarea {
+  width: 100%;
+  min-height: 170px;
+  resize: vertical;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--text);
+  padding: 12px 13px;
+  font: inherit;
+  line-height: 1.65;
+  outline: none;
+}
+
+.pk-comment-inline-editor textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.pk-comment-inline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 820px) {
+  .pk-comment-inline-editor textarea {
+    min-height: 220px;
+  }
+}
