@@ -50,17 +50,15 @@ function printTable(snapshot:MasterDataSnapshot,category:PersonalCatalogCategory
 function Viewer({title,data,onClose}:{title:string;data:unknown;onClose:()=>void}){return createPortal(<div className="master-json-backdrop" onMouseDown={(e)=>{if(e.currentTarget===e.target)onClose()}}><section className="master-json-modal"><header><div><span className="eyebrow">DETAIL VIEW</span><h2>{title}</h2></div><button onClick={onClose}>×</button></header>{typeof data==='string'?<div className="master-long-reader">{data}</div>:<pre>{JSON.stringify(data,null,2)}</pre>}</section></div>,document.body)}
 
 type BackfillKind='genres'|'synopsis'|'translations'
-type SyncStep='idle'|'running'|'success'|'error'
+type TranslationSyncPhase='translating'|'supabase'|'refreshing'|'success'|'error'
 type TranslationSyncStatus={
-  supabase:SyncStep
-  refresh:SyncStep
-  master:SyncStep
+  phase:TranslationSyncPhase
+  title:string
+  detail?:string
+  completed?:string[]
   audit?:SynopsisTranslationPersistenceAudit
   masterPtBrCount?:number
-  detail?:string
 }
-
-function stepIcon(step:SyncStep){return step==='success'?'✓':step==='error'?'!':step==='running'?'↻':'·'}
 
 function MasterTable({onClose}:{onClose:()=>void}){
   const [snapshot,setSnapshot]=useState<MasterDataSnapshot|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState('')
@@ -78,35 +76,44 @@ function MasterTable({onClose}:{onClose:()=>void}){
   async function runTranslations(){
     if(backfill)return
     setBackfillOpen(false);setBackfill('translations');setError('')
-    setTranslationSync({supabase:'running',refresh:'idle',master:'idle',detail:'Translating eligible synopsis and verifying each write with Supabase read-back.'})
+    setTranslationSync({phase:'translating',title:'Translating synopsis to PT-BR…',detail:'Only synopsis already stored in Supabase are processed.'})
     try{
       const result=await backfillSynopsisTranslationsPtBr((p)=>setTranslationProgress(p))
       setTranslationProgress(result)
-      const audit=await auditSynopsisTranslationPersistence()
-      if(result.total>0&&result.succeeded===0&&audit.ptBrCount===0){
-        setTranslationSync({supabase:'error',refresh:'idle',master:'idle',audit,detail:`No PT-BR synopsis was persisted. ${result.failed} translation(s) failed at the translation provider.`})
+      if(result.succeeded===0){
+        const detail=result.haltedReason ?? (result.failed?`${result.failed} translation(s) failed before any new PT-BR synopsis could be persisted.`:'No eligible synopsis required translation.')
+        setTranslationSync({phase:result.failed?'error':'success',title:result.failed?'Translation stopped before persistence':'Nothing to translate',detail})
         return
       }
-      setTranslationSync({supabase:'success',refresh:'running',master:'idle',audit,detail:result.failed?`${result.failed} translation(s) failed; persisted rows were kept and verified.`:undefined})
+
+      const audit=await auditSynopsisTranslationPersistence()
+      setTranslationSync({phase:'supabase',title:'Persisted in Supabase',audit,completed:[`✓ ${result.succeeded} new PT-BR synopsis persisted with read-back verification`],detail:`${audit.ptBrCount} PT-BR synopsis are now stored in Supabase.`})
+      await new Promise((resolve)=>window.setTimeout(resolve,350))
+
+      setTranslationSync({phase:'refreshing',title:'Refreshing Master Data Table…',audit,completed:[`✓ Persisted in Supabase · ${audit.ptBrCount} PT-BR synopsis`]})
       setRefreshing(true)
       const next=await loadMasterDataSnapshot()
       setSnapshot(next);setUpdatedLabel('Updated just now');setRefreshing(false)
       const masterPtBrCount=next.works.filter((work)=>Boolean(work.synopsis.ptBR?.trim())).length
       const matches=masterPtBrCount===audit.ptBrCount
+      if(!matches){
+        setTranslationSync({phase:'error',title:'Master Data Table verification failed',audit,masterPtBrCount,completed:[`✓ Persisted in Supabase · ${audit.ptBrCount} PT-BR synopsis`,`✓ Master Data snapshot refreshed`],detail:`Supabase contains ${audit.ptBrCount} PT-BR synopsis, but the Master Data snapshot returned ${masterPtBrCount}. Re-run the latest data-integrity-master-v4.sql RPC if this mismatch persists.`})
+        return
+      }
       setTranslationSync({
-        supabase:'success',
-        refresh:'success',
-        master:matches?'success':'error',
+        phase:'success',
+        title:'Persisted in Master Data Table',
         audit,
         masterPtBrCount,
-        detail:matches
-          ? (result.failed?`${result.failed} translation(s) failed at the provider and can be retried later.`:undefined)
-          : `Supabase contains ${audit.ptBrCount} PT-BR synopsis, but the Master Data snapshot returned ${masterPtBrCount}. Re-run the latest data-integrity-master-v4.sql RPC if this mismatch persists.`,
+        completed:[`✓ Persisted in Supabase · ${audit.ptBrCount} PT-BR synopsis`,`✓ Refreshed Master Data Table from Supabase`],
+        detail:result.haltedReason
+          ? `${masterPtBrCount} PT-BR synopsis are visible. The batch stopped early because the translation provider returned a rate limit: ${result.haltedReason}`
+          : `${masterPtBrCount} PT-BR synopsis are visible in the current Master Data snapshot.${result.failed?` ${result.failed} item(s) failed and can be retried later.`:''}`,
       })
     }catch(reason){
       setRefreshing(false)
       const message=reason instanceof Error?reason.message:'PT-BR synopsis backfill failed.'
-      setTranslationSync((current)=>({supabase:current?.supabase==='success'?'success':'error',refresh:current?.supabase==='success'?'error':'idle',master:'error',audit:current?.audit,detail:message}))
+      setTranslationSync({phase:'error',title:'PT-BR backfill failed',detail:message})
       setError(message)
     }finally{setBackfill(null)}
   }
@@ -125,14 +132,12 @@ function MasterTable({onClose}:{onClose:()=>void}){
         {backfillOpen&&!backfill&&<div className="master-export-menu master-backfill-menu"><button onClick={()=>void runGenres()}>Backfill Genres</button><button onClick={()=>void runSynopsis()}>Backfill Synopsis</button><button onClick={()=>void runTranslations()}>Backfill Synopsis Translation PT-BR</button></div>}
       </div>
       <div className="master-export-wrap"><button className="primary-button" onClick={()=>{setExportOpen((v)=>!v);setBackfillOpen(false)}}>Export</button>{exportOpen&&snapshot&&<div className="master-export-menu"><button onClick={()=>exportCsv(snapshot,category)}>Download CSV</button><button onClick={()=>exportJson(snapshot)}>Download JSON</button><button onClick={()=>void exportPdf(snapshot,category)}>Download PDF</button><button onClick={()=>printTable(snapshot,category)}>Print</button><button disabled title="Google Sheets write scope is not authorized yet.">Export to Google Sheets — not configured</button></div>}</div>
-      {translationSync&&<div className="translation-persistence-status" role="status" aria-live="polite">
-        <div className={`translation-sync-step ${translationSync.supabase}`}><span>{stepIcon(translationSync.supabase)}</span><div><strong>{translationSync.supabase==='success'?'Persisted in Supabase':translationSync.supabase==='error'?'Supabase persistence failed':'Persisting in Supabase…'}</strong>{translationSync.audit&&<small>{translationSync.audit.ptBrCount} PT-BR synopsis persisted · {translationSync.audit.missingPtBrCount} still missing</small>}</div></div>
-        <div className={`translation-sync-step ${translationSync.refresh}`}><span>{stepIcon(translationSync.refresh)}</span><div><strong>{translationSync.refresh==='success'?'Refreshed Master Data Table from Supabase':translationSync.refresh==='error'?'Master Data refresh failed':translationSync.refresh==='running'?'Refreshing Master Data Table…':'Waiting to refresh Master Data Table'}</strong></div></div>
-        <div className={`translation-sync-step ${translationSync.master}`}><span>{stepIcon(translationSync.master)}</span><div><strong>{translationSync.master==='success'?'Persisted in Master Data Table':translationSync.master==='error'?'Master Data Table verification failed':translationSync.master==='running'?'Verifying Master Data Table…':'Waiting for Master Data Table verification'}</strong>{translationSync.masterPtBrCount!=null&&<small>{translationSync.masterPtBrCount} PT-BR synopsis visible in the current snapshot</small>}</div></div>
-        {translationSync.detail&&<small className="translation-sync-detail">{translationSync.detail}</small>}
+      {translationSync&&<div className={`translation-persistence-status ${translationSync.phase}`} role="status" aria-live="polite">
+        <span className="translation-sync-badge">{translationSync.phase==='success'?'✓':translationSync.phase==='error'?'!':'↻'}</span>
+        <div className="translation-sync-copy"><strong>{translationSync.title}</strong>{translationSync.completed?.map((item)=><small key={item}>{item}</small>)}{translationSync.detail&&<small>{translationSync.detail}</small>}</div>
       </div>}
     </div>
-    {progress&&backfill&&<div className="master-backfill-status compact-status"><strong>{backfillLabel} backfill: {progress.processed}/{progress.total} ({percent}%)</strong><div className="master-progress"><span style={{width:`${percent}%`}}/></div><small>{progress.succeeded} stored · {progress.missingSource} missing source · {progress.failed} failed</small>{progress.currentWork&&<small> · {progress.currentWork}</small>}</div>}
+    {progress&&backfill&&<div className="master-backfill-status compact-status"><strong>{backfillLabel} backfill: {progress.processed}/{progress.total} ({percent}%)</strong><div className="master-progress"><span style={{width:`${percent}%`}}/></div><small>{progress.succeeded} stored · {progress.missingSource} missing source · {progress.failed} failed</small>{progress.currentWork&&<small> · {progress.currentWork}</small>}{progress.haltedReason&&<small> · stopped: {progress.haltedReason}</small>}</div>}
     <nav className="master-data-tabs">{personalCatalogCategories.map((tab)=><button key={tab.id} className={category===tab.id?'active':''} onClick={()=>setCategory(tab.id)}>{tab.label}<span>{snapshot?.categoryCounts[tab.id] ?? 0}</span></button>)}</nav>
     {error&&<div className="notice error">{error}</div>}
     {loading&&<div className="master-data-loading"><span className="spinner"/><strong>Loading Supabase master data…</strong></div>}
