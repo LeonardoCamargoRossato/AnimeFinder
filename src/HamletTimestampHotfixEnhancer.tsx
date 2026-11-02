@@ -5,6 +5,7 @@ import type { HamletMessage } from './hamletTypes'
 const TIMESTAMP_CLASS = 'chat-message-timestamp'
 let inFlight = false
 let lastSignature = ''
+let lastRetriedSignature = ''
 let retryTimer = 0
 
 function formatTimestamp(value: string) {
@@ -100,8 +101,11 @@ async function syncHamletTimestamps(force = false) {
     // Session timestamps remain visible if persistent history is temporarily unavailable.
   } finally {
     inFlight = false
-    window.clearTimeout(retryTimer)
-    retryTimer = window.setTimeout(() => { void syncHamletTimestamps(true) }, 650)
+    if (lastRetriedSignature !== signature) {
+      lastRetriedSignature = signature
+      window.clearTimeout(retryTimer)
+      retryTimer = window.setTimeout(() => { void syncHamletTimestamps(true) }, 650)
+    }
   }
 }
 
