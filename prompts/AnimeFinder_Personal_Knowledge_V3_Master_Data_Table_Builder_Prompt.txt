@@ -1,0 +1,314 @@
+ANIMEFINDER — PERSONAL KNOWLEDGE V3 + MASTER DATA TABLE
+FANDOM PERSISTENCE FIX + COMMENT READER + SYNOPSIS CACHE + CHARACTER JSON + EXPORTS
+
+GOAL
+Evolve the CURRENT AnimeFinder incrementally. Do not rebuild the application, remove existing features, or overwrite saved personal data.
+
+GUIDING ARCHITECTURE
+- SUPABASE = source of truth after the migration is applied.
+- PERSONAL KNOWLEDGE = highest priority.
+- JIKAN / MAL = primary external character provider.
+- FANDOM = secondary/fallback external character provider.
+- MASTER DATA TABLE = complete human-readable database view.
+- JSON = structured portable export.
+- GOOGLE SHEETS = optional external representation only when explicit write OAuth scopes exist.
+- CACHE FIRST = fast daily experience.
+- UI text remains ENGLISH. Leonardo's personal content may remain Portuguese.
+
+==================================================
+A. CRITICAL FIX — FANDOM PERSISTENCE
+==================================================
+Current real case:
+World Trigger → Sōya Kazama → Try Fandom → correct World Trigger Fandom result → Confirm Fandom Match.
+
+Required behavior after confirmation:
+- Persist provider=fandom.
+- Persist personal_work_id and personal_character_id.
+- Persist canonical_name, page/external id, page URL, wiki/domain, image URL when available, metadata, confirmed=true, last_synced_at.
+- Fandom-only is a valid externally linked state. It must NOT continue to be shown as simply “unlinked”.
+- Update UI immediately after successful save.
+- After full reload, Fandom identity/photo/link must still be available from Supabase/cache without a new search.
+- Do not hide Supabase errors. Log real error code/message in development diagnostics. If migration is missing, preserve local fallback and explicitly indicate that cross-device persistence needs the migration.
+- Existing Jikan links remain untouched.
+- A Personal Character can have Jikan only, Fandom only, Jikan + Fandom, or no external source.
+
+Do not overwrite My Comment, My Keywords, Personal Rank, Character comments/keywords, Original Observations, or Personal Knowledge versions.
+
+==================================================
+B. MY PERSONAL KNOWLEDGE V3
+==================================================
+Keep the vertical full-width layout but change the order to:
+1. MY COMMENT
+2. FAVORITE / HIGHLIGHTED CHARACTERS
+3. KEYWORDS
+
+Header:
+MY PERSONAL KNOWLEDGE
+My Personal Knowledge                       [✨ Open AI Personal Knowledge]
+Description
+
+Desktop: action stays upper-right.
+Mobile: action may wrap below title/description but remains inside the header.
+
+MY COMMENT:
+- Compact preview only, roughly one paragraph plus part of the second.
+- Never expand the full text inline on the page.
+- “Show more” opens a COMMENT READER MODAL.
+
+COMMENT READER MODAL:
+- Full comment.
+- Close.
+- Expand/fullscreen and restore.
+- Listen.
+- Reuse the existing AnimeFinder audio/TTS player.
+- Player must support the existing playback behavior: play/pause, ±10 seconds, progress, playback speed/settings, voice selection when available, and close/minimize controls.
+
+FAVORITE CHARACTERS:
+- Full width immediately below My Comment.
+- Responsive wrapping.
+- Cards show photo if cached, personal rank, canonical/display name, subtle external-source state.
+- Any Personal Knowledge character is clickable even without Jikan.
+- Clicking opens Character Profile.
+
+KEYWORDS:
+- Full width after Favorite Characters.
+- Responsive chips with flex-wrap; no unnecessary horizontal scrolling.
+
+==================================================
+C. CHARACTER PROFILE / EXTERNAL SOURCES
+==================================================
+Character Profile remains personal-first:
+MY KNOWLEDGE
+- My Rank
+- My Comment
+- My Keywords
+
+Then CHARACTER INFORMATION and EXTERNAL SOURCES.
+
+External-source priority:
+1. Personal Knowledge
+2. Jikan/MAL
+3. Fandom
+
+External Sources buttons:
+[Fandom ↗] [MyAnimeList ↗]
+Only show URLs that genuinely exist.
+
+Fandom search is user-triggered only. Never crawl/search Fandom for all catalog entries automatically.
+
+==================================================
+D. PERSISTENT SYNOPSIS CACHE
+==================================================
+Persist synopsis for ALL Personal Catalog categories, not only Watched:
+- Watched
+- Movies
+- Manhua
+- Dropped / Unfinished
+- New Seasons 2026
+- Needs Classification
+
+For a Personal Work with a trusted MAL/Jikan association:
+- Fetch original synopsis once.
+- Persist synopsis_original.
+- Persist synopsis_source.
+- Persist synopsis_source_language.
+- Persist synopsis_fetched_at.
+- Translate to Portuguese (Brazil) once through a TranslationService abstraction.
+- Persist synopsis_pt_br.
+- Future Anime Details reads must use Supabase/cache first.
+- Do NOT translate again if both original and PT-BR already exist.
+
+Items without a compatible source:
+- Never invent synopsis.
+- Persist/report status missing_source.
+
+Backfill:
+- Manual/controlled action.
+- No hundreds of simultaneous requests.
+- Small sequential/batched workload with rate-limit awareness.
+- Per-item failure does not abort the entire run.
+- Visible progress: processed/total, success, missing source, failed, current work.
+- Resume naturally by skipping already completed records.
+
+==================================================
+E. MASTER DATA TABLE
+==================================================
+The normal Personal Catalog remains clean.
+
+Flow:
+Personal Catalog → Expand → View Full Table
+
+View Full Table opens a near-fullscreen database/spreadsheet-style interface.
+
+Respect the existing category tabs. They are views over the same Personal Catalog, not duplicated data.
+
+Detailed columns should include, where applicable:
+- My Ranked
+- Anime
+- MAL Score
+- Original Observations
+- Comments
+- Characters
+- Keywords
+- Genres
+- Full English Name
+- Original Full Name
+- MyAnimeList
+- Knowledge
+- MAL Synopsis
+- Synopsis PT-BR
+- Character Knowledge
+
+Performance:
+- Batch/cache first.
+- No 140×N request pattern.
+- Do not trigger external Jikan/Fandom requests just because the Master Table opened.
+- Synopsis reads come from Supabase/cache.
+- Character external metadata comes from persisted/cache data.
+- Horizontal scrolling is acceptable in the full database view.
+
+==================================================
+F. CHARACTER KNOWLEDGE JSON
+==================================================
+Character Knowledge JSON is a READ-ONLY DERIVED PROJECTION, not a duplicated source-of-truth string.
+
+Conceptual structure per Personal Work:
+[
+  {
+    "rank": 1,
+    "name": "Mikumo, Osamu",
+    "personalComment": "...",
+    "keywords": ["Strategy", "Intelligence"],
+    "externalSources": {
+      "jikan": {
+        "characterId": "...",
+        "canonicalName": "...",
+        "myAnimeListUrl": "...",
+        "imageUrl": "..."
+      },
+      "fandom": {
+        "externalId": "...",
+        "canonicalName": "...",
+        "url": "...",
+        "wikiDomain": "...",
+        "imageUrl": "..."
+      }
+    }
+  }
+]
+
+Supabase remains normalized. Build this projection from Personal Characters + Character Comments + Character Keywords + External Sources.
+
+Table cell:
+“6 characters · View JSON”
+
+View JSON opens a formatted read-only JSON viewer.
+
+==================================================
+G. EXPORTS
+==================================================
+Master Data Table → Export:
+- Download CSV — operational.
+- Download JSON — operational and structured by category.
+- Download PDF — operational, human-readable report, not a screenshot of a giant spreadsheet.
+- Export to Google Sheets — only operational if explicit Google Sheets write OAuth scopes/integration exist.
+
+Do NOT infer Google Sheets permission from Google login through Supabase. If write scopes are absent, show the option as prepared/not configured rather than pretending it works.
+
+JSON export should include:
+- version
+- exportedAt
+- categories
+- personal metadata
+- comments
+- keywords
+- synopsis
+- character personal knowledge
+- persisted external character references
+
+==================================================
+H. DATABASE MIGRATION
+==================================================
+Provide an incremental Supabase migration that preserves existing data.
+
+Add persistent synopsis cache table equivalent to:
+personal_work_synopsis
+- user_id
+- personal_work_id
+- mal_id
+- synopsis_original
+- synopsis_pt_br
+- synopsis_source
+- synopsis_source_language
+- status
+- last_error
+- synopsis_fetched_at
+- updated_at
+
+Ensure multi-provider external character source table supports:
+personal_character_external_sources
+- user_id
+- personal_work_id
+- personal_character_id
+- provider (jikan/fandom)
+- external_id
+- canonical_name
+- url
+- image_url
+- metadata_json
+- confirmed
+- last_synced_at
+
+Use RLS restricted to the authorized AnimeFinder user model.
+
+Do NOT store Character Knowledge JSON as a duplicated database column. Keep it derived.
+
+==================================================
+I. ACCEPTANCE TESTS
+==================================================
+1. FANDOM PERSISTENCE
+World Trigger → Sōya Kazama → Try Fandom → Confirm.
+Expected: save succeeds, Fandom linked state/photo/canonical name appears, full reload keeps it, no new Fandom search needed.
+
+2. COMMENT READER
+World Trigger → My Personal Knowledge → Show more.
+Expected: modal with full comment, fullscreen/restore, Listen/audio controls, close.
+
+3. KNOWLEDGE ORDER
+Expected: My Comment → Favorite / Highlighted Characters → Keywords.
+
+4. SYNOPSIS CACHE
+Run controlled enrichment for a work with MAL synopsis.
+Expected: original + PT-BR stored. Reload uses Supabase/cache and does not repeat translation.
+
+5. MASTER TABLE
+Personal Catalog → Expand → View Full Table.
+Expected: fullscreen database-like view, category tabs, detailed columns, synopsis columns and Character Knowledge JSON viewer.
+
+6. CHARACTER JSON
+World Trigger → View JSON.
+Expected: confirmed characters ordered by personal rank, personal comments/keywords and Jikan/Fandom refs when persisted.
+
+7. EXPORT
+CSV, JSON and PDF work.
+Google Sheets is disabled/prepared unless explicit write authorization is truly configured.
+
+==================================================
+J. FINAL REPORT
+==================================================
+After implementation report exactly:
+A. What caused the Fandom persistence bug.
+B. Database/schema changes.
+C. Where original/PT-BR synopsis is stored.
+D. How many catalog works were processed by an actually executed backfill.
+E. How many succeeded.
+F. How many have no compatible source.
+G. How Character Knowledge is represented in Supabase.
+H. Whether Character Knowledge JSON is stored or generated as a projection.
+I. Supported external character providers.
+J. Operational export formats.
+K. Whether Google Sheets is operational or only prepared.
+L. Relevant resulting schema for Personal Works, Synopsis, Keywords, Personal Characters, Character Comments, Character Keywords and Jikan/Fandom external sources.
+M. Confirm existing Personal Knowledge was preserved.
+
+Never claim that a Supabase migration/backfill was executed unless it was actually executed against the database.
