@@ -1,0 +1,152 @@
+ANIMEFINDER — FIX JIKAN CHARACTER LINKING + PERSONAL KNOWLEDGE UI
+
+Quero corrigir a implementação ATUAL do Character Knowledge no AnimeFinder.
+
+IMPORTANTE
+- NÃO reconstruir o AnimeFinder.
+- NÃO reconstruir o AI Personal Knowledge.
+- NÃO remover o Character Knowledge já implementado.
+- NÃO alterar funcionalidades que já estão funcionando sem necessidade.
+- Esta tarefa é um fix incremental da implementação atual.
+
+PROBLEMAS ATUAIS
+1. Jikan Character Linking não funciona de forma confiável em produção.
+2. My Comment ocupa espaço vertical demais dentro de My Personal Knowledge.
+
+JIKAN — INVESTIGAR PRIMEIRO
+No GitHub Pages foi observado ERR_CONNECTION_TIMED_OUT para:
+https://api.jikan.moe/v4/anime/44940/characters
+
+Investigar request direto, timeout, CORS, rate limiting, disponibilidade, GitHub Pages x localhost, AbortController, retries, cache e erros silenciosos. Não assumir CORS sem evidência.
+
+ARQUITETURA CACHE FIRST
+A UI não pode depender de Browser → Jikan → UI em toda abertura.
+Fluxo esperado:
+AnimeFinder → cache local/Supabase → se existir, mostrar imediatamente.
+Se não existir → CharacterProvider → validar → cachear → mostrar.
+Se provider falhar, Personal Knowledge continua funcionando e metadata externa cacheada continua disponível.
+
+CHARACTER PROVIDER
+Preservar CharacterProvider / JikanCharacterProvider. A UI não conhece endpoints.
+Centralizar timeout, retry, cache, parsing e fallback.
+Permitir transporte server-side/proxy via configuração quando disponível. Não criar hack de componente.
+
+RETRY E ERROS
+Retry pequeno e limitado para network/timeout/429/5xx.
+Diferenciar:
+- Character not linked
+- ⚠ Jikan temporarily unavailable
+Adicionar Retry quando provider estiver indisponível.
+
+PERSONAL WORK ≠ TEMPORADA
+World Trigger é uma obra/franquia generalizada. Considerar primaryMalId + associationMalIds e unir os rosters das entradas associadas. Deduplicar por MAL Character ID.
+Isso evita perder favoritos que não estejam listados em uma temporada específica.
+
+MATCHING
+Matching por canonical name, nome invertido, first/last name, token completo, normalização e romanização simples.
+Não exagerar no fuzzy matching.
+Match duvidoso exige confirmação.
+Nunca linkar silenciosamente.
+
+WORLD TRIGGER — TESTE PRINCIPAL
+Personal Work: World Trigger
+Personagens pessoais atuais:
+1. Osamu Mikumo
+2. Replica
+3. Hyuse
+4. Yuichi Jin
+5. Yuma Kuga
+6. Soya Kazama
+Respeitar exatamente o ranking pessoal.
+
+PHOTOS
+Depois do linking, usar imediatamente a imagem real do cache/Jikan.
+Se imagem falhar, usar iniciais. Nunca deixar imagem quebrada.
+
+CACHE
+Persistir pelo menos:
+- provider
+- MAL Character ID
+- canonical name
+- image URL
+- role
+- about quando disponível
+- metadata externa
+- last_synced_at
+Também cachear roster por MAL Anime ID para não repetir requests.
+
+PERSONAL KNOWLEDGE É IMUTÁVEL PARA O PROVIDER
+Jikan nunca pode alterar:
+- My Comment
+- Keywords
+- character ranking
+- character comments
+- character keywords
+- Original Observations
+Jikan enriquece apenas EXTERNAL CHARACTER KNOWLEDGE.
+
+CHARACTER PROFILE
+Ao clicar em personagem linkado, abrir Character Profile.
+Prioridade:
+MY KNOWLEDGE
+- My Rank
+- My Comment
+- My Keywords
+Depois CHARACTER INFORMATION:
+- Photo
+- Canonical Name
+- Role
+- About
+- Appearances
+- Voice Actors
+- View on MyAnimeList
+Somente mostrar campos realmente disponíveis.
+
+FIX — MY COMMENT
+O My Comment deve ficar compacto por padrão.
+Mostrar aproximadamente 1 parágrafo inteiro + parte visual do segundo, usando limite por altura, não número fixo de caracteres.
+Adicionar fade inferior.
+Adicionar Show more / Show less instantâneo, sem request.
+No modo compacto, My Comment, Keywords e Favorite Characters devem ficar rapidamente visíveis na mesma região.
+Não redesenhar a seção.
+
+SCROLLBARS
+Manter identidade do AnimeFinder:
+- track discreto/claro
+- thumb roxo
+- hover um pouco mais forte
+- cantos arredondados
+Aplicar nas áreas roláveis relacionadas, modais e Character Profile.
+
+PERFORMANCE
+NÃO buscar characters para 140+ animes ao abrir My Watched Anime.
+Buscar apenas quando:
+- abrir Personal Knowledge e o cache for necessário;
+- executar Link Characters;
+- abrir Character Profile sem cache;
+- refresh explícito.
+Cache first sempre.
+
+TESTES DE ACEITAÇÃO
+A) World Trigger → My Personal Knowledge: comentário/keywords/personagens pessoais carregam independentemente do provider.
+B) Link Characters: se provider disponível, sugestões aparecem; se indisponível, erro real + Retry.
+C) Fotos: personagens linkados usam foto válida; fallback para iniciais se imagem falhar.
+D) Cache: recarregar a página não deve exigir imediatamente todos os requests externos.
+E) Jikan offline: Personal Knowledge permanece funcional e links/cache existentes continuam visíveis.
+F) My Comment: compacto por padrão → Show more → comentário completo → Show less.
+G) Build TypeScript/Vite e GitHub Pages devem passar sem regressão.
+
+ORDEM
+1. Diagnosticar falha real.
+2. Fortalecer CharacterProvider.
+3. Implementar retry/failover/erro explícito.
+4. Garantir cache local + Supabase.
+5. Combinar rosters da franquia e deduplicar.
+6. Corrigir linking e fotos.
+7. Validar Character Profile.
+8. Compactar My Comment.
+9. Padronizar scrollbars.
+10. Rodar CI e deploy.
+
+RESULTADO FINAL
+World Trigger deve mostrar Personal Knowledge rapidamente, comentário compacto, keywords intactas e Favorite Characters na ordem pessoal. Links externos devem ser cache-first, resilientes e confirmados pelo usuário. O app deve continuar utilizável mesmo quando Jikan estiver lento ou indisponível.
