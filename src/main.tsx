@@ -11,10 +11,11 @@ import CharacterProfileProviderEnhancer from './CharacterProfileProviderEnhancer
 import FandomPersistenceEnhancer from './FandomPersistenceEnhancer'
 import MasterDataTableEnhancer from './MasterDataTableEnhancer'
 import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
-import PersonalKnowledgeChatBubbleEnhancer from './PersonalKnowledgeChatBubbleEnhancer'
 import HamletAIEnhancer from './HamletAIEnhancer'
 import HamletRecommendationsDrawerEnhancer from './HamletRecommendationsDrawerEnhancer'
 import HamletVoiceInputEnhancer from './HamletVoiceInputEnhancer'
+import PersonalKnowledgeChatBubbleEnhancer from './PersonalKnowledgeChatBubbleEnhancer'
+import PersonalKnowledgeProfileDrawerEnhancer from './PersonalKnowledgeProfileDrawerEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import WishlistWatchedLockEnhancer from './WishlistWatchedLockEnhancer'
 import WorldTriggerKeywordHotfixEnhancer from './WorldTriggerKeywordHotfixEnhancer'
@@ -50,6 +51,7 @@ import './single-source-v1.css'
 import './analytics.css'
 import './personal-knowledge-layout-hotfix.css'
 import './personal-knowledge-chat-bubbles.css'
+import './personal-knowledge-profile-drawer.css'
 
 async function bootstrap() {
   await handleSupabaseAuthCallback()
@@ -70,10 +72,11 @@ async function bootstrap() {
         <FandomPersistenceEnhancer />
         <MasterDataTableEnhancer />
         <AIEnrichmentEnhancer />
-        <PersonalKnowledgeChatBubbleEnhancer />
         <HamletAIEnhancer />
         <HamletRecommendationsDrawerEnhancer />
         <HamletVoiceInputEnhancer />
+        <PersonalKnowledgeChatBubbleEnhancer />
+        <PersonalKnowledgeProfileDrawerEnhancer />
         <WishlistEnhancer />
         <WishlistWatchedLockEnhancer />
         <WorldTriggerKeywordHotfixEnhancer />
