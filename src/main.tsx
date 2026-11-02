@@ -16,6 +16,7 @@ import HamletRecommendationsDrawerEnhancer from './HamletRecommendationsDrawerEn
 import HamletVoiceInputEnhancer from './HamletVoiceInputEnhancer'
 import PersonalKnowledgeChatBubbleEnhancer from './PersonalKnowledgeChatBubbleEnhancer'
 import PersonalKnowledgeProfileDrawerEnhancer from './PersonalKnowledgeProfileDrawerEnhancer'
+import PersonalKnowledgeCommentHotfixEnhancer from './PersonalKnowledgeCommentHotfixEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import WishlistWatchedLockEnhancer from './WishlistWatchedLockEnhancer'
 import WorldTriggerKeywordHotfixEnhancer from './WorldTriggerKeywordHotfixEnhancer'
@@ -52,6 +53,7 @@ import './analytics.css'
 import './personal-knowledge-layout-hotfix.css'
 import './personal-knowledge-chat-bubbles.css'
 import './personal-knowledge-profile-drawer.css'
+import './personal-knowledge-comment-hotfix.css'
 
 async function bootstrap() {
   await handleSupabaseAuthCallback()
@@ -77,6 +79,7 @@ async function bootstrap() {
         <HamletVoiceInputEnhancer />
         <PersonalKnowledgeChatBubbleEnhancer />
         <PersonalKnowledgeProfileDrawerEnhancer />
+        <PersonalKnowledgeCommentHotfixEnhancer />
         <WishlistEnhancer />
         <WishlistWatchedLockEnhancer />
         <WorldTriggerKeywordHotfixEnhancer />
