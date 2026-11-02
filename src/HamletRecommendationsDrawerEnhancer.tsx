@@ -20,10 +20,10 @@ export default function HamletRecommendationsDrawerEnhancer() {
     const sync = () => {
       const workspace = document.querySelector('.hamlet-workspace') as HTMLElement | null
       const nextPanel = workspace?.querySelector('.hamlet-recommendations-panel') as HTMLElement | null
-      const conversationHeading = workspace?.querySelector('.hamlet-conversation-panel .hamlet-panel-heading') as HTMLElement | null
+      const intentBar = workspace?.querySelector('.hamlet-intent-bar') as HTMLElement | null
       const recommendationsHeading = nextPanel?.querySelector('.hamlet-panel-heading') as HTMLElement | null
 
-      if (!workspace || !nextPanel || !conversationHeading || !recommendationsHeading) {
+      if (!workspace || !nextPanel || !intentBar || !recommendationsHeading) {
         setPanel(null)
         setActionHost(null)
         setControlsHost(null)
@@ -34,12 +34,13 @@ export default function HamletRecommendationsDrawerEnhancer() {
       workspace.classList.add('hamlet-drawer-experience')
       nextPanel.classList.add('hamlet-recommendations-drawer')
 
-      let nextActionHost = conversationHeading.querySelector(`[${ACTION_HOST}]`) as HTMLElement | null
+      let nextActionHost = intentBar.querySelector(`[${ACTION_HOST}]`) as HTMLElement | null
       if (!nextActionHost) {
+        document.querySelector(`[${ACTION_HOST}]`)?.remove()
         nextActionHost = document.createElement('div')
         nextActionHost.setAttribute(ACTION_HOST, 'true')
         nextActionHost.className = 'hamlet-recommendations-action-host'
-        conversationHeading.appendChild(nextActionHost)
+        intentBar.appendChild(nextActionHost)
       }
 
       let nextControlsHost = recommendationsHeading.querySelector(`[${CONTROLS_HOST}]`) as HTMLElement | null
@@ -88,12 +89,14 @@ export default function HamletRecommendationsDrawerEnhancer() {
   return <>
     {actionHost && recommendationCount > 0 && createPortal(
       <button
-        className="primary-button hamlet-view-recommendations"
+        className="hamlet-view-recommendations"
         type="button"
         onClick={() => setMode('normal')}
         aria-haspopup="dialog"
       >
-        Ver recomendações <span>{recommendationCount}</span>
+        <span className="hamlet-view-recommendations-icon">✦</span>
+        <span className="hamlet-view-recommendations-label">Ver recomendações</span>
+        <span className="hamlet-view-recommendations-count">{recommendationCount}</span>
       </button>,
       actionHost,
     )}
