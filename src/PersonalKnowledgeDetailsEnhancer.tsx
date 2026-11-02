@@ -12,14 +12,15 @@ function PersonalKnowledgePanel({ malId }: { malId: number }) {
   const [knowledge, setKnowledge] = useState<PersonalKnowledge | null>(null)
   const [work, setWork] = useState<ManagedCatalogWork | null>(() => findManagedWorkByMalId(malId))
   const [error, setError] = useState('')
+  const [commentExpanded, setCommentExpanded] = useState(false)
 
   useEffect(() => {
-    setState('idle'); setKnowledge(null); setError(''); setWork(findManagedWorkByMalId(malId))
+    setState('idle'); setKnowledge(null); setError(''); setCommentExpanded(false); setWork(findManagedWorkByMalId(malId))
   }, [malId])
 
   async function load() {
     if (!work) { setError('This anime is not linked to a Personal Catalog work yet.'); setState('error'); return }
-    setState('loading'); setError('')
+    setState('loading'); setError(''); setCommentExpanded(false)
     try {
       const comments = await listAnimeComments()
       const fallback = comments.find((row) => row.malId === malId)?.contentText ?? ''
@@ -39,6 +40,7 @@ function PersonalKnowledgePanel({ malId }: { malId: number }) {
   const comment = knowledge ? currentWorkVersion(knowledge)?.content ?? '' : ''
   const keywords = knowledge?.keywords.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank) ?? []
   const characters = knowledge?.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank) ?? []
+  const commentNeedsToggle = comment.length > 320 || comment.split(/\n\s*\n/).length > 1
 
   return <section className="details-v2-deferred-section personal-knowledge-details-section">
     <div className="details-v2-section-heading deferred-heading">
@@ -48,7 +50,14 @@ function PersonalKnowledgePanel({ malId }: { malId: number }) {
     {state === 'loading' && <div className="deferred-loading" role="status"><div className="deferred-loading-row"><span className="spinner" /><strong>Loading Personal Knowledge…</strong></div><div className="deferred-progress"><span /></div><small>This private section loads only when requested.</small></div>}
     {state === 'error' && <div className="notice error">{error}</div>}
     {state === 'success' && knowledge && <div className="personal-knowledge-details-grid">
-      <article className="personal-knowledge-details-card comment-card"><span>MY COMMENT</span><p>{comment || 'No saved personal comment yet.'}</p>{knowledge.versions.length > 0 && <small>V{knowledge.currentVersionNumber} · {knowledge.versions.length} version{knowledge.versions.length === 1 ? '' : 's'}</small>}</article>
+      <article className="personal-knowledge-details-card comment-card">
+        <span>MY COMMENT</span>
+        <div className={commentExpanded ? 'personal-knowledge-comment-shell expanded' : 'personal-knowledge-comment-shell'}>
+          <p>{comment || 'No saved personal comment yet.'}</p>
+        </div>
+        {commentNeedsToggle && <button type="button" className="text-button personal-knowledge-comment-toggle" onClick={() => setCommentExpanded((value) => !value)}>{commentExpanded ? 'Show less' : 'Show more'}</button>}
+        {knowledge.versions.length > 0 && <small>V{knowledge.currentVersionNumber} · {knowledge.versions.length} version{knowledge.versions.length === 1 ? '' : 's'}</small>}
+      </article>
       <article className="personal-knowledge-details-card"><span>KEYWORDS</span>{keywords.length ? <div className="personal-knowledge-ranked-list">{keywords.map((row) => <b key={row.label}>#{row.rank} {row.label}</b>)}</div> : <p>No confirmed keywords yet.</p>}</article>
       <article className="personal-knowledge-details-card"><span>FAVORITE / HIGHLIGHTED CHARACTERS</span>{characters.length ? <div className="personal-knowledge-character-list">{characters.map((row) => <div key={row.id}><b>#{row.rank} {row.name}</b><small>{row.commentVersions.at(-1)?.content ? `${row.commentVersions.at(-1)!.content.slice(0, 120)}${row.commentVersions.at(-1)!.content.length > 120 ? '…' : ''}` : 'No personal comment yet.'}</small></div>)}</div> : <p>No confirmed characters yet.</p>}</article>
       <div className="personal-knowledge-details-actions"><button type="button" className="primary-button" onClick={openEditor}>✨ Open AI Personal Knowledge</button></div>
