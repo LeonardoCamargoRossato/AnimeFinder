@@ -5,7 +5,6 @@ import type { HamletRecommendation, HamletSearchIntent } from './hamletTypes'
 
 const normalize = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 const unique = <T,>(values: T[]) => Array.from(new Set(values))
-const MAX_CANDIDATE_PAGES = 40
 const PAGE_SIZE = 25
 
 export interface HamletSearchMeta {
@@ -53,7 +52,7 @@ async function fetchCandidateBatch(genres: string[]) {
   const first = await animeProvider.browseAnime({ page: 1, limit: PAGE_SIZE, filters })
   const catalogTotal = first.total ?? first.items.length
   const catalogPages = first.lastPage ?? Math.max(1, Math.ceil(catalogTotal / PAGE_SIZE))
-  const pagesToLoad = Math.max(1, Math.min(catalogPages, MAX_CANDIDATE_PAGES))
+  const pagesToLoad = Math.max(1, catalogPages)
   const items: Anime[] = [...first.items]
 
   for (let start = 2; start <= pagesToLoad; start += 4) {
@@ -67,7 +66,7 @@ async function fetchCandidateBatch(genres: string[]) {
     catalogTotal,
     catalogPages,
     pagesLoaded: pagesToLoad,
-    truncated: pagesToLoad < catalogPages,
+    truncated: false,
   }
 }
 
@@ -88,7 +87,6 @@ export async function searchHamletAnime(intent: HamletSearchIntent): Promise<Ham
       batch.catalogTotal = Math.max(batch.catalogTotal, broad.catalogTotal)
       batch.catalogPages = Math.max(batch.catalogPages, broad.catalogPages)
       batch.pagesLoaded = Math.max(batch.pagesLoaded, broad.pagesLoaded)
-      batch.truncated = batch.truncated || broad.truncated
     }
     if (batch.items.length < 8) {
       const broad = await fetchCandidateBatch([])
@@ -96,7 +94,6 @@ export async function searchHamletAnime(intent: HamletSearchIntent): Promise<Ham
       batch.catalogTotal = Math.max(batch.catalogTotal, broad.catalogTotal)
       batch.catalogPages = Math.max(batch.catalogPages, broad.catalogPages)
       batch.pagesLoaded = Math.max(batch.pagesLoaded, broad.pagesLoaded)
-      batch.truncated = batch.truncated || broad.truncated
     }
   } catch (error) {
     if (!batch.items.length) throw error
@@ -134,7 +131,7 @@ export async function searchHamletAnime(intent: HamletSearchIntent): Promise<Ham
     filteredRecommendations: recommendations.length,
     pagesLoaded: batch.pagesLoaded,
     catalogPages: batch.catalogPages,
-    truncated: batch.truncated,
+    truncated: false,
   }
 
   return recommendations
