@@ -5,8 +5,7 @@ import { personalCatalogCategories, type PersonalCatalogCategory } from './perso
 import { backfillPersonalCatalogSynopsis, backfillSynopsisTranslationsPtBr, type SynopsisBackfillProgress } from './synopsis'
 import { auditSynopsisTranslationPersistence, type SynopsisTranslationPersistenceAudit } from './synopsisTranslationPersistence'
 import { backfillPersistedGenres, characterKnowledgeJson, loadMasterDataSnapshot, type MasterDataSnapshot, type MasterDataWork, type MetadataBackfillProgress } from './masterData'
-
-const PORTFOLIO_URL='https://leonardocamargorossato.github.io/LCR-SolutionsArchitecture-IA-Quantum/#/'
+import { ANIMEFINDER_PORTFOLIO_URL, applyAnimeFinderPdfFooter, createAnimeFinderPdf } from './pdfUtils'
 
 function csvCell(value:unknown){const text=value==null?'':typeof value==='string'?value:JSON.stringify(value);return `"${text.replace(/"/g,'""')}"`}
 function download(name:string,content:string,type:string){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
@@ -21,30 +20,29 @@ function exportCsv(snapshot:MasterDataSnapshot,category:PersonalCatalogCategory)
 function exportJson(snapshot:MasterDataSnapshot){download('AnimeFinder-Personal-Catalog-Supabase.json',JSON.stringify(fullExport(snapshot),null,2),'application/json;charset=utf-8')}
 
 async function exportPdf(snapshot:MasterDataSnapshot,category:PersonalCatalogCategory){
-  const moduleUrl='https://cdn.jsdelivr.net/npm/jspdf@2.5.2/+esm'
-  const pdfModule=await import(/* @vite-ignore */ moduleUrl) as {jsPDF:new(options?:Record<string,unknown>)=>any}
-  const doc=new pdfModule.jsPDF({orientation:'landscape',unit:'mm',format:'a4'}), label=personalCatalogCategories.find((x)=>x.id===category)?.label ?? category
+  const doc=await createAnimeFinderPdf({orientation:'landscape',unit:'mm',format:'a4'}), label=personalCatalogCategories.find((x)=>x.id===category)?.label ?? category
   const rows=snapshot.works.filter((work)=>work.category===category)
   const margin=10,pageWidth=297,pageHeight=210,rowHeight=8
   const widths=[13,48,18,47,42,44,55]
   const headers=['Rank','Anime','MAL','Comments','Keywords','Genres','Synopsis PT-BR']
-  let y=24,page=1
-  const footer=()=>{doc.setFontSize(7);doc.setFont('helvetica','normal');doc.text(`Created by Leonardo Camargo Rossato · LCR Solutions Architecture — IA & Quantum · Page ${page}`,margin,pageHeight-6);doc.link(margin,pageHeight-10,88,6,{url:PORTFOLIO_URL})}
+  let y=24
   const header=()=>{doc.setFillColor(92,66,190);doc.rect(0,0,pageWidth,18,'F');doc.setTextColor(255);doc.setFontSize(16);doc.setFont('helvetica','bold');doc.text(`AnimeFinder — ${label}`,margin,12);doc.setTextColor(20);doc.setFontSize(7);let x=margin;headers.forEach((h,i)=>{doc.setFont('helvetica','bold');doc.text(h,x,y);x+=widths[i]});y+=5}
   header()
   rows.forEach((work,index)=>{
-    if(y+rowHeight>pageHeight-13){footer();doc.addPage();page+=1;y=24;header()}
+    if(y+rowHeight>pageHeight-13){doc.addPage();y=24;header()}
     if(index%2===1){doc.setFillColor(245,242,255);doc.rect(margin-1,y-4,pageWidth-margin*2+2,rowHeight,'F')}
     const values=[work.myRanked?`#${work.myRanked}`:'—',work.displayName,work.malScore?.toFixed(2) ?? '—',work.comment,work.keywords.join(', '),work.genres.join(', '),work.synopsis.ptBR ?? work.synopsis.original ?? '—']
     let x=margin;values.forEach((value,i)=>{doc.setFont('helvetica','normal');const text=String(value ?? '—');const clipped=text.length>80?`${text.slice(0,77)}…`:text;doc.text(clipped,x,y,{maxWidth:widths[i]-2});x+=widths[i]});y+=rowHeight
-  });footer();doc.save(`AnimeFinder-${label.replace(/[^a-z0-9]+/gi,'-')}.pdf`)
+  })
+  applyAnimeFinderPdfFooter(doc)
+  doc.save(`AnimeFinder-${label.replace(/[^a-z0-9]+/gi,'-')}.pdf`)
 }
 
 function printTable(snapshot:MasterDataSnapshot,category:PersonalCatalogCategory){
   const rows=snapshot.works.filter((w)=>w.category===category),label=personalCatalogCategories.find((x)=>x.id===category)?.label ?? category
   const popup=window.open('','_blank','noopener,noreferrer');if(!popup)return
   const esc=(value:unknown)=>String(value ?? '').replace(/[&<>"']/g,(m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]!))
-  popup.document.write(`<!doctype html><html><head><title>AnimeFinder ${esc(label)}</title><style>@page{size:A4 landscape;margin:10mm}body{font:10px Arial;color:#151226}h1{color:#5c42be}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{border:1px solid #bbb;padding:5px;vertical-align:top;overflow:hidden}tr:nth-child(even){background:#f6f2ff}th{background:#5c42be;color:#fff}.clamp{max-height:32px;overflow:hidden}footer{margin-top:10px;font-size:9px}</style></head><body><h1>AnimeFinder — ${esc(label)}</h1><table><thead><tr><th>Rank</th><th>Anime</th><th>MAL</th><th>Comments</th><th>Keywords</th><th>Genres</th><th>Synopsis PT-BR</th></tr></thead><tbody>${rows.map((w)=>`<tr><td>${w.myRanked?`#${w.myRanked}`:'—'}</td><td>${esc(w.displayName)}</td><td>${esc(w.malScore ?? '—')}</td><td><div class="clamp">${esc(w.comment)}</div></td><td>${esc(w.keywords.join(', '))}</td><td>${esc(w.genres.join(', '))}</td><td><div class="clamp">${esc(w.synopsis.ptBR ?? w.synopsis.original ?? '—')}</div></td></tr>`).join('')}</tbody></table><footer>Created by Leonardo Camargo Rossato · <a href="${PORTFOLIO_URL}">LCR Solutions Architecture — IA & Quantum</a></footer><script>window.print()</script></body></html>`);popup.document.close()
+  popup.document.write(`<!doctype html><html><head><title>AnimeFinder ${esc(label)}</title><style>@page{size:A4 landscape;margin:10mm}body{font:10px Arial;color:#151226}h1{color:#5c42be}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{border:1px solid #bbb;padding:5px;vertical-align:top;overflow:hidden}tr:nth-child(even){background:#f6f2ff}th{background:#5c42be;color:#fff}.clamp{max-height:32px;overflow:hidden}footer{margin-top:10px;font-size:9px;text-align:center;color:#645f78}</style></head><body><h1>AnimeFinder — ${esc(label)}</h1><table><thead><tr><th>Rank</th><th>Anime</th><th>MAL</th><th>Comments</th><th>Keywords</th><th>Genres</th><th>Synopsis PT-BR</th></tr></thead><tbody>${rows.map((w)=>`<tr><td>${w.myRanked?`#${w.myRanked}`:'—'}</td><td>${esc(w.displayName)}</td><td>${esc(w.malScore ?? '—')}</td><td><div class="clamp">${esc(w.comment)}</div></td><td>${esc(w.keywords.join(', '))}</td><td>${esc(w.genres.join(', '))}</td><td><div class="clamp">${esc(w.synopsis.ptBR ?? w.synopsis.original ?? '—')}</div></td></tr>`).join('')}</tbody></table><footer>AnimeFinder created by <a href="${ANIMEFINDER_PORTFOLIO_URL}">Leonardo Camargo Rossato</a> / <a href="${ANIMEFINDER_PORTFOLIO_URL}">LCR Portfolio</a></footer><script>window.print()</script></body></html>`);popup.document.close()
 }
 
 function Viewer({title,data,onClose}:{title:string;data:unknown;onClose:()=>void}){return createPortal(<div className="master-json-backdrop" onMouseDown={(e)=>{if(e.currentTarget===e.target)onClose()}}><section className="master-json-modal"><header><div><span className="eyebrow">DETAIL VIEW</span><h2>{title}</h2></div><button onClick={onClose}>×</button></header>{typeof data==='string'?<div className="master-long-reader">{data}</div>:<pre>{JSON.stringify(data,null,2)}</pre>}</section></div>,document.body)}
