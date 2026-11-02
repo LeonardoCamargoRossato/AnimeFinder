@@ -1,0 +1,4 @@
+.character-fandom-provider-summary{display:grid;gap:3px;margin:12px 0;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--surface) 94%,var(--accent) 6%)}
+.character-fandom-provider-summary span{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:800}
+.character-fandom-provider-summary strong{font-size:14px;color:var(--text)}
+.character-fandom-provider-summary small{color:var(--muted)}
