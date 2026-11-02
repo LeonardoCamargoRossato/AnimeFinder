@@ -1,6 +1,27 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import SynopsisAudioPlayer from './SynopsisAudioPlayer'
 
 type SectionState = 'collapsed' | 'preview' | 'full'
+
+type FullscreenCommentDetail = {
+  text: string
+  version: string
+}
+
+function openCommentFullscreen(card: HTMLElement, title: HTMLElement) {
+  const directText = card.querySelector<HTMLElement>(':scope > p')?.innerText.trim() ?? ''
+  const fallbackText = Array.from(card.querySelectorAll<HTMLElement>('p'))
+    .map((node) => node.innerText.trim())
+    .find(Boolean) ?? ''
+  const text = directText || fallbackText
+  if (!text) return
+
+  const version = title.querySelector<HTMLElement>(':scope > small')?.innerText.trim() ?? ''
+  window.dispatchEvent(new CustomEvent<FullscreenCommentDetail>('animefinder:open-current-comment-fullscreen', {
+    detail: { text, version },
+  }))
+}
 
 function setSectionState(card: HTMLElement, state: SectionState) {
   card.classList.remove('pk-section-collapsed', 'pk-section-preview', 'pk-section-full')
@@ -19,8 +40,8 @@ function setSectionState(card: HTMLElement, state: SectionState) {
     closeButton.hidden = true
   } else if (state === 'preview') {
     expandButton.textContent = '⛶'
-    expandButton.title = 'Expand section fully'
-    expandButton.setAttribute('aria-label', 'Expand section fully')
+    expandButton.title = card.classList.contains('pk-section-comment') ? 'Open Current Comment fullscreen' : 'Expand section fully'
+    expandButton.setAttribute('aria-label', expandButton.title)
     expandButton.hidden = false
     closeButton.hidden = false
   } else {
@@ -59,7 +80,15 @@ function enhanceSection(card: HTMLElement) {
   expand.addEventListener('click', (event) => {
     event.stopPropagation()
     const state = (card.dataset.pkSectionState || 'preview') as SectionState
-    setSectionState(card, state === 'collapsed' ? 'preview' : 'full')
+    if (state === 'collapsed') {
+      setSectionState(card, 'preview')
+      return
+    }
+    if (card.classList.contains('pk-section-comment')) {
+      openCommentFullscreen(card, title)
+      return
+    }
+    setSectionState(card, 'full')
   })
 
   close.addEventListener('click', (event) => {
@@ -107,16 +136,77 @@ function enhanceWorkspace(workspace: HTMLElement) {
 }
 
 export default function PersonalKnowledgeProfileDrawerEnhancer() {
+  const [fullscreenComment, setFullscreenComment] = useState<FullscreenCommentDetail | null>(null)
+  const [audioOpen, setAudioOpen] = useState(false)
+
   useEffect(() => {
     const scan = () => {
       document.querySelectorAll<HTMLElement>('.pk-workspace').forEach(enhanceWorkspace)
+    }
+    const openFullscreen = (event: Event) => {
+      const detail = (event as CustomEvent<FullscreenCommentDetail>).detail
+      if (!detail?.text) return
+      setAudioOpen(false)
+      setFullscreenComment(detail)
     }
 
     scan()
     const observer = new MutationObserver(scan)
     observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
+    window.addEventListener('animefinder:open-current-comment-fullscreen', openFullscreen)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('animefinder:open-current-comment-fullscreen', openFullscreen)
+    }
   }, [])
 
-  return null
+  useEffect(() => {
+    if (!fullscreenComment) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setAudioOpen(false)
+      setFullscreenComment(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [fullscreenComment])
+
+  if (!fullscreenComment) return null
+
+  const closeFullscreen = () => {
+    setAudioOpen(false)
+    setFullscreenComment(null)
+  }
+
+  return createPortal(
+    <div className="pk-comment-fullscreen-backdrop" role="dialog" aria-modal="true" aria-label="Current comment fullscreen">
+      <section className="pk-comment-fullscreen">
+        <header className="pk-comment-fullscreen-header">
+          <div className="pk-comment-fullscreen-heading">
+            <span>COMMENT</span>
+            <h2>Current comment</h2>
+            {fullscreenComment.version && <small>{fullscreenComment.version}</small>}
+          </div>
+          <div className="pk-comment-fullscreen-actions">
+            <button type="button" className="ghost-button" onClick={() => setAudioOpen(true)}>🔊 Listen</button>
+            <button type="button" className="pk-comment-fullscreen-close" onClick={closeFullscreen} aria-label="Close Current Comment fullscreen">×</button>
+          </div>
+        </header>
+        <div className="pk-comment-fullscreen-content">
+          <p>{fullscreenComment.text}</p>
+        </div>
+        {audioOpen && (
+          <div className="pk-comment-fullscreen-audio">
+            <SynopsisAudioPlayer
+              text={fullscreenComment.text}
+              lang="pt-BR"
+              languageLabel="Português (Brasil)"
+              onClose={() => setAudioOpen(false)}
+            />
+          </div>
+        )}
+      </section>
+    </div>,
+    document.body,
+  )
 }
