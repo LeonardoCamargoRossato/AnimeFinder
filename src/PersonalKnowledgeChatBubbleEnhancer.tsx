@@ -12,17 +12,34 @@ function setExpanded(target: HTMLElement, expanded: boolean) {
   }
 }
 
+function resetEditingBubble(target: HTMLElement) {
+  if (!target.querySelector(':scope > textarea')) return false
+  target.querySelector(':scope > .pk-bubble-toggle')?.remove()
+  target.classList.remove('pk-collapsible-bubble', 'pk-bubble-expanded')
+  target.removeAttribute(ENHANCED_ATTR)
+  return true
+}
+
 function enhanceBubble(target: HTMLElement) {
-  if (target.hasAttribute(ENHANCED_ATTR)) return
+  if (resetEditingBubble(target)) return
 
   const paragraph = target.querySelector(':scope > p') as HTMLParagraphElement | null
   if (!paragraph) return
 
-  target.setAttribute(ENHANCED_ATTR, 'true')
   const text = paragraph.textContent?.trim() ?? ''
-  if (text.length <= LONG_MESSAGE_THRESHOLD) return
+  const isUserBubble = target.classList.contains('pk-user-bubble')
+  const existingToggle = target.querySelector(':scope > .pk-bubble-toggle') as HTMLButtonElement | null
+
+  if (text.length <= LONG_MESSAGE_THRESHOLD) {
+    existingToggle?.remove()
+    target.classList.remove('pk-collapsible-bubble', 'pk-bubble-expanded')
+    target.setAttribute(ENHANCED_ATTR, 'true')
+    return
+  }
 
   target.classList.add('pk-collapsible-bubble')
+  target.setAttribute(ENHANCED_ATTR, 'true')
+  if (existingToggle) return
 
   const toggle = document.createElement('button')
   toggle.type = 'button'
@@ -38,14 +55,19 @@ function enhanceBubble(target: HTMLElement) {
     setExpanded(target, expanded)
   })
 
-  target.addEventListener('click', (event) => {
-    const clicked = event.target as HTMLElement
-    if (clicked.closest('button, textarea, input, select, a')) return
-    event.preventDefault()
-    event.stopPropagation()
-    const expanded = !target.classList.contains('pk-bubble-expanded')
-    setExpanded(target, expanded)
-  })
+  // Assistant bubbles keep click-to-expand. User bubbles intentionally do not:
+  // their native React click opens the version editor, while See more remains explicit.
+  if (!isUserBubble && target.dataset.pkExpandClickBound !== 'true') {
+    target.dataset.pkExpandClickBound = 'true'
+    target.addEventListener('click', (event) => {
+      const clicked = event.target as HTMLElement
+      if (clicked.closest('button, textarea, input, select, a')) return
+      event.preventDefault()
+      event.stopPropagation()
+      const expanded = !target.classList.contains('pk-bubble-expanded')
+      setExpanded(target, expanded)
+    })
+  }
 
   target.appendChild(toggle)
 }
