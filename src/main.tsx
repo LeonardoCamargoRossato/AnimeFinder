@@ -12,6 +12,7 @@ import FandomPersistenceEnhancer from './FandomPersistenceEnhancer'
 import MasterDataTableEnhancer from './MasterDataTableEnhancer'
 import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
 import HamletAIEnhancer from './HamletAIEnhancer'
+import HamletRecommendationsDrawerEnhancer from './HamletRecommendationsDrawerEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import WishlistWatchedLockEnhancer from './WishlistWatchedLockEnhancer'
 import WorldTriggerKeywordHotfixEnhancer from './WorldTriggerKeywordHotfixEnhancer'
@@ -34,6 +35,7 @@ import './ai-enrichment.css'
 import './ai-personal-knowledge.css'
 import './hamlet-ai.css'
 import './hamlet-chat-bubbles-global.css'
+import './hamlet-recommendations-drawer.css'
 import './character-knowledge.css'
 import './character-linking-fix.css'
 import './character-knowledge-v2.css'
@@ -63,6 +65,7 @@ async function bootstrap() {
         <MasterDataTableEnhancer />
         <AIEnrichmentEnhancer />
         <HamletAIEnhancer />
+        <HamletRecommendationsDrawerEnhancer />
         <WishlistEnhancer />
         <WishlistWatchedLockEnhancer />
         <WorldTriggerKeywordHotfixEnhancer />
