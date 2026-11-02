@@ -48,10 +48,60 @@ export default function AIEnrichmentEnhancer() {
       const button = document.createElement('button')
       button.type = 'button'
       button.className = enriched ? 'ghost-button ai-enrich-entry ai-enrich-details-injected enriched' : 'ghost-button ai-enrich-entry ai-enrich-details-injected'
-      button.textContent = enriched ? '✨ AI Personal Knowledge' : '✨ Enrich with AI'
+      button.setAttribute('aria-label', 'Enrich with Hamlet AI')
+      button.title = enriched ? 'Open Hamlet AI personal knowledge' : 'Enrich this anime with Hamlet AI'
+      button.style.display = 'inline-flex'
+      button.style.alignItems = 'center'
+      button.style.gap = '8px'
+      button.style.minHeight = '40px'
+      button.style.padding = '7px 13px 7px 8px'
+      button.style.border = '1px solid color-mix(in srgb, var(--accent) 82%, #fff 18%)'
+      button.style.background = 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), color-mix(in srgb, var(--accent) 10%, var(--background)))'
+      button.style.color = 'color-mix(in srgb, var(--accent) 82%, #fff 18%)'
+      button.style.boxShadow = '0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 30%, transparent)'
+
+      const face = document.createElement('span')
+      face.setAttribute('aria-hidden', 'true')
+      face.textContent = '◕‿◕'
+      face.style.display = 'grid'
+      face.style.placeItems = 'center'
+      face.style.width = '26px'
+      face.style.height = '26px'
+      face.style.flex = '0 0 26px'
+      face.style.borderRadius = '999px'
+      face.style.background = 'radial-gradient(circle at 35% 30%, #d9c7ff 0%, var(--accent) 46%, #4b1aa8 100%)'
+      face.style.color = '#fff'
+      face.style.fontSize = '10px'
+      face.style.fontWeight = '900'
+      face.style.letterSpacing = '-1px'
+      face.style.boxShadow = '0 0 0 1px color-mix(in srgb, #fff 58%, var(--accent)), 0 0 12px color-mix(in srgb, var(--accent) 72%, transparent)'
+
+      const label = document.createElement('span')
+      label.textContent = 'Enrich with Hamlet AI'
+      label.style.fontWeight = '800'
+      label.style.whiteSpace = 'nowrap'
+
+      button.replaceChildren(face, label)
+
+      const enterHandler = () => {
+        button.style.transform = 'translateY(-1px)'
+        button.style.borderColor = 'color-mix(in srgb, var(--accent) 92%, #fff 8%)'
+        button.style.boxShadow = '0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 24px color-mix(in srgb, var(--accent) 46%, transparent)'
+      }
+      const leaveHandler = () => {
+        button.style.transform = ''
+        button.style.borderColor = 'color-mix(in srgb, var(--accent) 82%, #fff 18%)'
+        button.style.boxShadow = '0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 30%, transparent)'
+      }
       const handler = () => setSelected(work)
+      button.addEventListener('mouseenter', enterHandler)
+      button.addEventListener('mouseleave', leaveHandler)
       button.addEventListener('click', handler)
-      cleanupFns.push(() => button.removeEventListener('click', handler))
+      cleanupFns.push(() => {
+        button.removeEventListener('mouseenter', enterHandler)
+        button.removeEventListener('mouseleave', leaveHandler)
+        button.removeEventListener('click', handler)
+      })
       actions.appendChild(button)
     }
 
