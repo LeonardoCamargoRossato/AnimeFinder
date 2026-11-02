@@ -36,6 +36,7 @@ type SpeechRecognitionLike = {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 
 const VOICE_HOST = 'data-hamlet-voice-input-host'
+const IDLE_LEVELS = [0.24, 0.38, 0.3, 0.48, 0.32, 0.4, 0.25]
 
 function getSpeechRecognition(): SpeechRecognitionConstructor | null {
   const speechWindow = window as unknown as {
@@ -43,6 +44,11 @@ function getSpeechRecognition(): SpeechRecognitionConstructor | null {
     webkitSpeechRecognition?: SpeechRecognitionConstructor
   }
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null
+}
+
+function getAudioContextConstructor() {
+  const audioWindow = window as typeof window & { webkitAudioContext?: typeof AudioContext }
+  return window.AudioContext ?? audioWindow.webkitAudioContext ?? null
 }
 
 function normalizeTranscript(value: string) {
@@ -78,7 +84,7 @@ function feedbackForError(error: string) {
     case 'no-speech':
       return "I didn't catch that. Try speaking again."
     case 'network':
-      return 'The browser speech service could not connect. Try again; if it persists, check Edge speech/microphone permissions.'
+      return 'The browser speech service could not connect. Try again; if it persists, check browser speech and microphone permissions.'
     default:
       return 'Voice input stopped. You can try again or keep typing.'
   }
@@ -99,7 +105,12 @@ export default function HamletVoiceInputEnhancer() {
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [state, setState] = useState<VoiceState>('idle')
   const [feedback, setFeedback] = useState('')
+  const [levels, setLevels] = useState<number[]>(IDLE_LEVELS)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const lastMeterUpdateRef = useRef(0)
   const baseDraftRef = useRef('')
   const finalTranscriptRef = useRef('')
   const interimTranscriptRef = useRef('')
@@ -113,6 +124,82 @@ export default function HamletVoiceInputEnhancer() {
     if (duration > 0) {
       feedbackTimerRef.current = window.setTimeout(() => setFeedback(''), duration)
     }
+  }
+
+  function stopAudioMeter(resetLevels = true) {
+    if (animationFrameRef.current != null) {
+      window.cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => undefined)
+      audioContextRef.current = null
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+    if (resetLevels) setLevels(IDLE_LEVELS)
+  }
+
+  function startAudioMeter(stream: MediaStream) {
+    const AudioContextConstructor = getAudioContextConstructor()
+    if (!AudioContextConstructor) return
+
+    const audioContext = new AudioContextConstructor()
+    const analyser = audioContext.createAnalyser()
+    const source = audioContext.createMediaStreamSource(stream)
+    analyser.fftSize = 64
+    analyser.smoothingTimeConstant = 0.72
+    source.connect(analyser)
+    audioContextRef.current = audioContext
+    void audioContext.resume().catch(() => undefined)
+
+    const frequencyData = new Uint8Array(analyser.frequencyBinCount)
+    const selectedBins = [2, 4, 6, 8, 10, 13, 16]
+
+    const tick = (timestamp: number) => {
+      if (timestamp - lastMeterUpdateRef.current >= 58) {
+        analyser.getByteFrequencyData(frequencyData)
+        const nextLevels = selectedBins.map((bin, index) => {
+          const raw = frequencyData[Math.min(bin, frequencyData.length - 1)] / 255
+          const shaped = Math.min(1, Math.max(0.14, raw * 1.9 + IDLE_LEVELS[index] * 0.24))
+          return shaped
+        })
+        setLevels(nextLevels)
+        lastMeterUpdateRef.current = timestamp
+      }
+      animationFrameRef.current = window.requestAnimationFrame(tick)
+    }
+
+    animationFrameRef.current = window.requestAnimationFrame(tick)
+  }
+
+  function finalizeTranscript() {
+    const transcript = (finalTranscriptRef.current || interimTranscriptRef.current).trim()
+    if (!transcript) {
+      setState('idle')
+      showFeedback("I didn't catch anything. Try speaking again.", 3200)
+      return
+    }
+
+    setState('processing')
+    showFeedback('Processing transcription…', 0)
+    window.setTimeout(() => {
+      const currentTextarea = document.querySelector('.hamlet-composer textarea') as HTMLTextAreaElement | null
+      if (!currentTextarea) {
+        setState('idle')
+        setFeedback('')
+        return
+      }
+      const cleaned = normalizeTranscript(transcript)
+      const base = baseDraftRef.current
+      const nextValue = base ? `${base} ${cleaned}` : cleaned
+      updateReactTextarea(currentTextarea, nextValue)
+      setState('ready')
+      showFeedback('Transcription ready — review or edit it before sending.', 4200)
+      window.setTimeout(() => setState('idle'), 1500)
+    }, 120)
   }
 
   useEffect(() => {
@@ -144,8 +231,10 @@ export default function HamletVoiceInputEnhancer() {
 
     return () => {
       observer.disconnect()
+      cancelledRef.current = true
       recognitionRef.current?.abort()
       recognitionRef.current = null
+      stopAudioMeter(false)
       document.querySelector('.hamlet-composer')?.classList.remove('hamlet-composer-voice-enabled')
       document.querySelector(`[${VOICE_HOST}]`)?.remove()
       if (feedbackTimerRef.current != null) window.clearTimeout(feedbackTimerRef.current)
@@ -157,15 +246,28 @@ export default function HamletVoiceInputEnhancer() {
     errorRef.current = false
     recognitionRef.current?.abort()
     recognitionRef.current = null
+    stopAudioMeter()
+    finalTranscriptRef.current = ''
+    interimTranscriptRef.current = ''
     setState('idle')
     showFeedback('Voice input cancelled.', 1800)
   }
 
-  async function beginListening() {
-    if (state === 'listening') {
-      cancelListening()
-      return
+  function finishListening() {
+    if (state !== 'listening') return
+    setState('processing')
+    showFeedback('Finishing voice input…', 0)
+    stopAudioMeter()
+    try {
+      recognitionRef.current?.stop()
+    } catch {
+      recognitionRef.current = null
+      finalizeTranscript()
     }
+  }
+
+  async function beginListening() {
+    if (state === 'listening' || state === 'processing') return
 
     const SpeechRecognition = getSpeechRecognition()
     if (!SpeechRecognition) {
@@ -178,11 +280,19 @@ export default function HamletVoiceInputEnhancer() {
     if (!textarea) return
 
     setFeedback('')
+    stopAudioMeter()
 
     if (navigator.mediaDevices?.getUserMedia) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        stream.getTracks().forEach((track) => track.stop())
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        })
+        streamRef.current = stream
+        startAudioMeter(stream)
       } catch (reason) {
         setState('error')
         showFeedback(feedbackForMediaError(reason), 5600)
@@ -198,33 +308,33 @@ export default function HamletVoiceInputEnhancer() {
     cancelledRef.current = false
     errorRef.current = false
 
-    // Prefer the user's browser/OS language. The app UI can be English while the user speaks Portuguese.
     recognition.lang = navigator.language || document.documentElement.lang || 'pt-BR'
-    recognition.continuous = false
+    recognition.continuous = true
     recognition.interimResults = true
     recognition.maxAlternatives = 1
 
     recognition.onstart = () => {
       setState('listening')
-      showFeedback('Listening… tap the microphone again to cancel.', 0)
+      showFeedback('Listening… use ■ to transcribe or × to cancel.', 0)
     }
 
     recognition.onresult = (event) => {
-      let finalText = finalTranscriptRef.current
-      let interimText = ''
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const finalParts: string[] = []
+      const interimParts: string[] = []
+      for (let index = 0; index < event.results.length; index += 1) {
         const result = event.results[index]
         const transcript = result[0]?.transcript?.trim() ?? ''
         if (!transcript) continue
-        if (result.isFinal) finalText = `${finalText} ${transcript}`.trim()
-        else interimText = `${interimText} ${transcript}`.trim()
+        if (result.isFinal) finalParts.push(transcript)
+        else interimParts.push(transcript)
       }
-      finalTranscriptRef.current = finalText
-      interimTranscriptRef.current = interimText
+      finalTranscriptRef.current = finalParts.join(' ').trim()
+      interimTranscriptRef.current = interimParts.join(' ').trim()
     }
 
     recognition.onerror = (event) => {
       if (cancelledRef.current) return
+      stopAudioMeter()
       errorRef.current = true
       setState('error')
       showFeedback(feedbackForError(event.error), 5600)
@@ -232,6 +342,7 @@ export default function HamletVoiceInputEnhancer() {
 
     recognition.onend = () => {
       recognitionRef.current = null
+      stopAudioMeter()
       if (cancelledRef.current) {
         cancelledRef.current = false
         return
@@ -240,38 +351,14 @@ export default function HamletVoiceInputEnhancer() {
         errorRef.current = false
         return
       }
-
-      // Some Chromium/Edge sessions end with a useful interim result but no final result.
-      const transcript = (finalTranscriptRef.current || interimTranscriptRef.current).trim()
-      if (!transcript) {
-        setState('idle')
-        showFeedback("I didn't catch anything. Try speaking again.", 3200)
-        return
-      }
-
-      setState('processing')
-      showFeedback('Processing transcription…', 0)
-      window.setTimeout(() => {
-        const currentTextarea = document.querySelector('.hamlet-composer textarea') as HTMLTextAreaElement | null
-        if (!currentTextarea) {
-          setState('idle')
-          setFeedback('')
-          return
-        }
-        const cleaned = normalizeTranscript(transcript)
-        const base = baseDraftRef.current
-        const nextValue = base ? `${base} ${cleaned}` : cleaned
-        updateReactTextarea(currentTextarea, nextValue)
-        setState('ready')
-        showFeedback('Transcription ready — review or edit it before sending.', 4200)
-        window.setTimeout(() => setState('idle'), 1500)
-      }, 120)
+      finalizeTranscript()
     }
 
     try {
       recognition.start()
     } catch {
       recognitionRef.current = null
+      stopAudioMeter()
       setState('error')
       showFeedback('Could not start speech recognition. Check microphone permission and try again.', 4600)
     }
@@ -279,25 +366,31 @@ export default function HamletVoiceInputEnhancer() {
 
   if (!host) return null
 
-  const label = state === 'listening'
-    ? 'Cancel voice input'
-    : state === 'processing'
-      ? 'Processing voice input'
-      : 'Start voice input'
-
   return createPortal(
     <div className={`hamlet-voice-control is-${state}`}>
-      <button
-        className="hamlet-voice-button"
-        type="button"
-        onClick={() => void beginListening()}
-        disabled={state === 'processing'}
-        aria-label={label}
-        title={label}
-        aria-pressed={state === 'listening'}
-      >
-        <span aria-hidden="true">{state === 'listening' ? '■' : state === 'processing' ? '…' : state === 'ready' ? '✓' : '🎙'}</span>
-      </button>
+      {state === 'listening' ? (
+        <div className="hamlet-voice-session" aria-label="Voice recording controls">
+          <button className="hamlet-voice-cancel" type="button" onClick={cancelListening} aria-label="Cancel voice input" title="Cancel voice input">×</button>
+          <div className="hamlet-voice-waveform" aria-label="Microphone level" role="img">
+            {levels.map((level, index) => <span key={index} style={{ height: `${Math.round(18 + level * 82)}%` }} />)}
+          </div>
+          <button className="hamlet-voice-stop" type="button" onClick={finishListening} aria-label="Stop and transcribe voice input" title="Stop and transcribe">
+            <span aria-hidden="true" />
+          </button>
+        </div>
+      ) : state === 'processing' ? (
+        <div className="hamlet-voice-processing-pill" role="status" aria-live="polite"><span className="hamlet-voice-processing-dot" />Transcribing</div>
+      ) : (
+        <button
+          className="hamlet-voice-button"
+          type="button"
+          onClick={() => void beginListening()}
+          aria-label="Start voice input"
+          title="Start voice input"
+        >
+          <span aria-hidden="true" />
+        </button>
+      )}
       {feedback && <span className="hamlet-voice-feedback" role="status" aria-live="polite">{feedback}</span>}
     </div>,
     host,
