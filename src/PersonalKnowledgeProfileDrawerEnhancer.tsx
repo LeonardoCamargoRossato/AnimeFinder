@@ -37,6 +37,11 @@ function enhanceSection(card: HTMLElement) {
   card.dataset.pkSectionEnhanced = 'true'
   card.classList.add('pk-collapsible-section')
 
+  const titleText = title.textContent?.toLowerCase() ?? ''
+  if (titleText.includes('comment')) card.classList.add('pk-section-comment')
+  else if (titleText.includes('keyword') || titleText.includes('personal signals')) card.classList.add('pk-section-keywords')
+  else if (titleText.includes('character')) card.classList.add('pk-section-characters')
+
   const actions = document.createElement('div')
   actions.className = 'pk-section-controls'
 
@@ -53,7 +58,7 @@ function enhanceSection(card: HTMLElement) {
 
   expand.addEventListener('click', (event) => {
     event.stopPropagation()
-    const state = (card.dataset.pkSectionState || 'collapsed') as SectionState
+    const state = (card.dataset.pkSectionState || 'preview') as SectionState
     setSectionState(card, state === 'collapsed' ? 'preview' : 'full')
   })
 
@@ -67,11 +72,11 @@ function enhanceSection(card: HTMLElement) {
 
   title.addEventListener('click', (event) => {
     if ((event.target as HTMLElement).closest('button')) return
-    const state = (card.dataset.pkSectionState || 'collapsed') as SectionState
+    const state = (card.dataset.pkSectionState || 'preview') as SectionState
     if (state === 'collapsed') setSectionState(card, 'preview')
   })
 
-  setSectionState(card, 'collapsed')
+  setSectionState(card, 'preview')
 }
 
 function enhanceWorkspace(workspace: HTMLElement) {
