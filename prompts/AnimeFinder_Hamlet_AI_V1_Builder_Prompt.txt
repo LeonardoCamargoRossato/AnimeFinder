@@ -1,0 +1,698 @@
+ANIMEFINDER — HAMLET AI V1
+GEMINI-POWERED CONVERSATIONAL ANIME DISCOVERY
+
+Quero adicionar ao AnimeFinder um novo módulo chamado:
+
+HAMLET AI
+
+Hamlet é o nome da inteligência artificial do AnimeFinder.
+
+IMPORTANTE:
+
+Hamlet AI ≠ Gemini.
+
+Hamlet é a camada/persona/arquitetura do AnimeFinder.
+Gemini será apenas o AI Provider utilizado atualmente.
+
+Arquitetura:
+
+HAMLET AI
+   ↓
+AIProvider abstraction
+   ↓
+GeminiProvider
+   ↓
+Gemini API
+
+Isso deve permitir futuramente substituir Gemini por outro provider sem
+reescrever Hamlet.
+
+==================================================
+1. ESCOPO DESTA V1
+==================================================
+
+NÃO implementar ainda:
+
+- RAG do Personal Knowledge;
+- análise dos meus 141+ animes;
+- análise do meu perfil;
+- recommendation learning;
+- fine-tuning;
+- embeddings do meu catálogo;
+- Character Knowledge retrieval.
+
+Nesta V1 Hamlet serve SOMENTE para:
+
+CONVERSATIONAL ANIME DISCOVERY.
+
+==================================================
+2. DISCOVER UI
+==================================================
+
+Na página Discover atualmente existe o sistema tradicional de Search.
+
+Preservar tudo.
+
+Adicionar uma segunda opção claramente visível:
+
+[ Search ] [ ✨ Hamlet AI ]
+
+Search:
+continua exatamente como hoje.
+
+Hamlet AI:
+abre o novo conversational discovery workspace.
+
+==================================================
+3. HAMLET AI WORKSPACE
+==================================================
+
+Desktop:
+
+┌────────────────────────────────────────────────────────┐
+│ ✨ HAMLET AI                                           │
+│ Conversational Anime Discovery                         │
+├────────────────────────┬───────────────────────────────┤
+│                        │                               │
+│ CONVERSATION           │ RECOMMENDATIONS               │
+│                        │                               │
+│ Hamlet messages        │ Anime cards                   │
+│ User messages          │                               │
+│                        │ Why it matches                │
+│                        │                               │
+│ [message........] [➤]  │                               │
+└────────────────────────┴───────────────────────────────┘
+
+Mobile:
+
+conversation first.
+
+Recommendations can appear underneath or through an appropriate responsive
+layout.
+
+==================================================
+4. EXAMPLE
+==================================================
+
+User:
+
+"Quero assistir um anime sobre RPG."
+
+Hamlet should understand that "RPG" is ambiguous.
+
+Instead of blindly searching titles containing RPG, Hamlet may answer:
+
+"Sure. When you say RPG, are you looking for something closer to:
+
+• characters inside a game world
+• fantasy with levels, skills and classes
+• party-based adventure and exploration
+• medieval fantasy with an RPG-like atmosphere?"
+
+User:
+
+"Fantasy with levels and skills."
+
+Hamlet interprets the intent.
+
+==================================================
+5. STRUCTURED SEARCH INTENT
+==================================================
+
+Gemini should NOT be responsible for inventing the final anime catalog.
+
+Hamlet uses Gemini primarily to convert conversation into structured search
+intent.
+
+Example conceptual output:
+
+{
+  "intent": "anime_discovery",
+  "readyToSearch": true,
+  "query": "RPG-like fantasy anime",
+  "genres": [
+    "Fantasy",
+    "Adventure"
+  ],
+  "themes": [
+    "Video Game"
+  ],
+  "concepts": [
+    "levels",
+    "skills",
+    "classes"
+  ],
+  "excludeWatched": true,
+  "clarificationQuestion": null
+}
+
+Validate structured output before using it.
+
+==================================================
+6. SEARCH PIPELINE
+==================================================
+
+Desired pipeline:
+
+USER
+↓
+HAMLET
+↓
+GEMINI
+↓
+STRUCTURED INTENT
+↓
+ANIMEFINDER SEARCH SERVICE
+↓
+SUPABASE / JIKAN
+↓
+REAL ANIME RESULTS
+↓
+HAMLET PRESENTS RESULTS
+
+Gemini should not hallucinate database records.
+
+==================================================
+7. SUPABASE FIRST
+==================================================
+
+Respect the global AnimeFinder architecture:
+
+SUPABASE = SOURCE OF TRUTH.
+
+When relevant metadata already exists in Supabase:
+
+use it.
+
+Jikan remains an external anime discovery/enrichment provider.
+
+==================================================
+8. CONVERSATIONAL FILTERING
+==================================================
+
+Hamlet must support follow-up conversation.
+
+Example:
+
+User:
+"I want an RPG."
+
+Hamlet:
+clarifies RPG.
+
+User:
+"Fantasy and adventure, but I don't really like isekai."
+
+Hamlet updates intent:
+
+Fantasy
+Adventure
+Exclude/avoid Isekai.
+
+User:
+"Actually, strategy is important too."
+
+Hamlet updates:
+
+Strategy.
+
+Do NOT restart the conversation every message.
+
+==================================================
+9. VISIBLE INTERPRETATION
+==================================================
+
+Show what Hamlet understood as editable chips.
+
+Example:
+
+Fantasy ×
+Adventure ×
+Strategy ×
+Game-like ×
+Avoid Isekai ×
+Not Watched ×
+
+This gives the user control over AI interpretation.
+
+==================================================
+10. EXPLAIN CONCEPTS
+==================================================
+
+Hamlet should also answer questions during discovery.
+
+Example:
+
+User:
+
+"I don't know the difference between Fantasy, Adventure and Isekai."
+
+Hamlet explains.
+
+No search is required until Hamlet/user has enough criteria.
+
+==================================================
+11. RESULTS
+==================================================
+
+When ready, show actual AnimeFinder anime cards.
+
+Reuse existing AnimeFinder cards/components whenever possible.
+
+Cards should remain clickable and open Anime Details.
+
+Do NOT create a disconnected second anime-card system.
+
+==================================================
+12. WHY IT MATCHES
+==================================================
+
+Hamlet can provide a concise explanation based on the available metadata.
+
+Example:
+
+"Strong match because it combines fantasy, progression mechanics and
+party-based adventure."
+
+Do not claim facts unsupported by available metadata/context.
+
+==================================================
+13. WATCHED FILTER
+==================================================
+
+Since Supabase contains the Personal Catalog:
+
+Hamlet search should be capable of excluding works already watched.
+
+Default behavior can favor:
+
+exclude already watched
+
+unless user explicitly asks otherwise.
+
+==================================================
+14. GEMINI PROVIDER
+==================================================
+
+Create provider abstraction.
+
+Conceptually:
+
+interface AIProvider {
+  sendMessage(...)
+  interpretSearchIntent(...)
+}
+
+Implementation:
+
+GeminiProvider
+
+Do NOT spread Gemini-specific code throughout React components.
+
+==================================================
+15. FUTURE PROVIDERS
+==================================================
+
+Architecture should allow later:
+
+GeminiProvider
+OpenAIProvider
+GroqProvider
+OpenRouterProvider
+
+without rewriting Hamlet UI/business logic.
+
+==================================================
+16. SECURITY — CRITICAL
+==================================================
+
+NEVER put:
+
+GEMINI_API_KEY
+
+inside:
+
+React source
+Vite public env
+VITE_GEMINI_API_KEY
+GitHub repository
+GitHub Pages bundle
+browser localStorage
+Supabase database table
+
+The Gemini credential is a SECRET.
+
+==================================================
+17. SUPABASE EDGE FUNCTION
+==================================================
+
+Use a Supabase Edge Function as the secure server-side bridge.
+
+Architecture:
+
+AnimeFinder React
+        ↓
+authenticated request
+        ↓
+Supabase Edge Function
+        ↓
+GEMINI_API_KEY secret
+        ↓
+Gemini API
+        ↓
+structured response
+        ↓
+AnimeFinder
+
+The browser must never receive the Gemini key.
+
+==================================================
+18. SECRET
+==================================================
+
+Read Gemini credential from a Supabase Edge Function secret/environment variable.
+
+Expected conceptual secret:
+
+GEMINI_API_KEY
+
+Never log its value.
+
+==================================================
+19. AUTHORIZATION
+==================================================
+
+AnimeFinder is currently a private authenticated application.
+
+The Hamlet Edge Function should only accept appropriately authenticated AnimeFinder
+requests.
+
+Do not expose an unrestricted public Gemini proxy.
+
+==================================================
+20. GEMINI API
+==================================================
+
+Use the CURRENT recommended official Gemini API/SDK approach.
+
+Do not implement against deprecated Gemini libraries if a current official SDK/API
+exists.
+
+Keep Gemini implementation encapsulated inside GeminiProvider / Edge Function.
+
+==================================================
+21. MODEL
+==================================================
+
+Use an appropriate Gemini model available in the Free Tier for conversational text
+and structured intent.
+
+Do not hardcode business logic around a specific model forever.
+
+Make model configurable server-side, e.g.:
+
+HAMLET_GEMINI_MODEL
+
+with a sensible current default.
+
+==================================================
+22. CONVERSATION
+==================================================
+
+V1 needs multi-turn conversation.
+
+Hamlet must understand previous messages from the current conversation.
+
+Do not send unnecessary AnimeFinder database data to Gemini.
+
+For V1 send only what is needed:
+
+system instructions
+conversation context
+current search intent
+user message
+minimal search/filter vocabulary if useful.
+
+==================================================
+23. LANGUAGE
+==================================================
+
+AnimeFinder UI remains English.
+
+Hamlet UI labels remain English:
+
+Hamlet AI
+Conversation
+Recommendations
+Search
+Clear Conversation
+etc.
+
+Hamlet may converse in the language used by the user.
+
+If user speaks Portuguese:
+
+Hamlet can answer Portuguese.
+
+If English:
+
+English.
+
+==================================================
+24. HAMLET PERSONALITY
+==================================================
+
+Hamlet should be:
+
+helpful
+concise
+curious when clarification improves results
+knowledgeable about anime terminology
+not overly verbose.
+
+Do NOT make Hamlet theatrical just because the name is Hamlet.
+
+The name is branding.
+
+==================================================
+25. CONVERSATION STORAGE
+==================================================
+
+Follow the AnimeFinder global rule:
+
+NO LOCALSTORAGE FOR PERSISTENT USER DATA.
+
+For V1, current unsaved conversation can remain in React memory.
+
+If conversation history is persisted:
+
+persist it in Supabase.
+
+Never localStorage.
+
+==================================================
+26. OPTIONAL SUPABASE CONVERSATION MODEL
+==================================================
+
+If implementing persistence now is simple and clean, create appropriate structures
+such as:
+
+hamlet_conversations
+hamlet_messages
+
+associated with authenticated user.
+
+Otherwise current-session conversation may remain ephemeral in memory for V1.
+
+Do not overengineer.
+
+==================================================
+27. LOADING UX
+==================================================
+
+Use streaming if appropriate/current Gemini API makes it practical.
+
+Hamlet should feel conversational.
+
+Show:
+
+Hamlet is thinking...
+
+or streaming response.
+
+Do not freeze the entire page.
+
+==================================================
+28. ERROR HANDLING
+==================================================
+
+Handle:
+
+Gemini unavailable
+rate limit
+Free Tier quota exceeded
+Edge Function error
+invalid structured response
+network timeout
+
+with friendly errors.
+
+Example:
+
+"Hamlet is temporarily unavailable. Please try again."
+
+Do not break traditional Search.
+
+==================================================
+29. FALLBACK
+==================================================
+
+If Hamlet/Gemini is unavailable:
+
+traditional AnimeFinder Search remains fully operational.
+
+AI is an enhancement, not a critical dependency.
+
+==================================================
+30. COST CONTROL
+==================================================
+
+V1 should minimize token consumption.
+
+Do not send:
+
+all 141+ watched anime
+all Personal Knowledge
+all comments
+all Character Knowledge
+
+to Gemini.
+
+That belongs to future Hamlet V2/V3.
+
+==================================================
+31. FUTURE ARCHITECTURE — PREPARE ONLY
+==================================================
+
+Design boundaries for future:
+
+HAMLET V1
+Gemini + conversational discovery.
+
+HAMLET V2
+Supabase Personal Knowledge retrieval / RAG.
+
+HAMLET V3
+quantitative personal profile +
+retrieval +
+Gemini reasoning.
+
+Do NOT implement V2/V3 now.
+
+==================================================
+32. BRANDING
+==================================================
+
+Use:
+
+✨ Hamlet AI
+
+or an equivalent clean visual identity consistent with AnimeFinder.
+
+Do not use:
+
+Gemini AI
+
+as the visible product name.
+
+Gemini is an implementation detail/provider.
+
+==================================================
+33. ACCEPTANCE TEST
+==================================================
+
+User opens Discover.
+
+Sees:
+
+Search
+Hamlet AI.
+
+Clicks Hamlet AI.
+
+Types:
+
+"Quero assistir um anime sobre RPG."
+
+Hamlet responds conversationally and asks for clarification when appropriate.
+
+User:
+
+"Algo de fantasia com níveis e habilidades."
+
+Hamlet produces structured search intent.
+
+AnimeFinder searches real anime data.
+
+Recommendations appear.
+
+User:
+
+"Não quero isekai."
+
+Hamlet updates existing criteria and results.
+
+==================================================
+34. SECURITY TEST
+==================================================
+
+Inspect:
+
+browser source
+network requests
+GitHub repository
+built JS bundle
+
+GEMINI_API_KEY must NOT be exposed.
+
+==================================================
+35. FINAL REPORT
+==================================================
+
+After implementation report:
+
+- files created/modified
+- Hamlet UI architecture
+- AIProvider architecture
+- GeminiProvider architecture
+- Supabase Edge Function name
+- required Supabase secret names
+- Gemini model selected
+- whether streaming is implemented
+- whether conversation persistence is implemented
+- database migrations, if any
+- exact manual steps Leonardo must perform
+- deployment commands/actions still required
+- test result
+- any Free Tier limitation relevant to current implementation
+
+IMPORTANT:
+
+Do not invent the Gemini key.
+
+If GEMINI_API_KEY is missing, build everything possible and clearly stop at the
+point where Leonardo needs to provide/configure the secret.
+
+FINAL ARCHITECTURE:
+
+HAMLET AI = ANIMEFINDER AI PRODUCT
+
+GEMINI = CURRENT REASONING ENGINE
+
+SUPABASE = DATABASE + SECURE SERVER BRIDGE
+
+JIKAN = ANIME DISCOVERY PROVIDER
+
+React/GitHub Pages = CLIENT
+
+Gemini secret must NEVER reach the browser.
