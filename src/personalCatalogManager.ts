@@ -11,6 +11,7 @@ export interface ManagedCatalogWork extends PersonalCatalogItem {
   watchStatus: PersonalWatchStatus
   associationMalIds: number[]
   posterUrl?: string | null
+  genres?: string[]
   pending?: boolean
   source: 'snapshot' | 'dynamic'
 }
@@ -20,13 +21,9 @@ export interface ManagedCatalogState {
   savedAt?: string
 }
 
-const STORAGE_KEY = 'animefinder.personalCatalog.dynamic.v0'
-const DRAFT_KEY = 'animefinder.personalCatalog.draft.v0'
-
-function safeParse<T>(value: string | null, fallback: T): T {
-  if (!value) return fallback
-  try { return JSON.parse(value) as T } catch { return fallback }
-}
+let hydratedWorks: ManagedCatalogWork[] = []
+let draftState: ManagedCatalogState | null = null
+let hydrated = false
 
 export function normalizePersonalWorkName(value: string) {
   return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
@@ -43,7 +40,11 @@ function stableSnapshotId(item: PersonalCatalogItem, index: number) {
   return `snapshot:${item.category}:${item.malId ?? (normalizePersonalWorkName(item.anime) || index)}`
 }
 
-function snapshotWorks(): ManagedCatalogWork[] {
+/**
+ * Legacy/historical seed only. Runtime catalog reads MUST NOT call this.
+ * It exists so the one-time browser/hardcoded migration can insert missing rows into Supabase.
+ */
+export function legacySnapshotWorks(): ManagedCatalogWork[] {
   const result: ManagedCatalogWork[] = []
   let index = 0
   for (const category of ['watched', 'movies', 'manhua', 'dropped-unfinished', 'new-seasons-2026', 'needs-classification'] as PersonalCatalogCategory[]) {
@@ -55,6 +56,7 @@ function snapshotWorks(): ManagedCatalogWork[] {
         primaryMalId: item.malId,
         watchStatus: statusForCategory(item.category),
         associationMalIds: item.malId == null ? [] : [item.malId],
+        genres: [],
         source: 'snapshot',
       })
     }
@@ -62,35 +64,67 @@ function snapshotWorks(): ManagedCatalogWork[] {
   return result
 }
 
+function mapMasterRow(row: any): ManagedCatalogWork {
+  return {
+    id: String(row.id),
+    displayName: String(row.displayName ?? ''),
+    anime: String(row.displayName ?? ''),
+    primaryMalId: row.primaryMalId == null ? null : Number(row.primaryMalId),
+    malId: row.primaryMalId == null ? null : Number(row.primaryMalId),
+    malUrl: row.malUrl ?? null,
+    malScore: row.malScore == null ? null : Number(row.malScore),
+    originalObservations: row.originalObservations ?? null,
+    comments: row.comment ?? null,
+    englishName: row.englishName ?? null,
+    originalName: row.originalName ?? null,
+    myRanked: row.myRanked == null ? null : Number(row.myRanked),
+    watched: row.watchStatus === 'watched',
+    watchStatus: (row.watchStatus ?? 'unknown') as PersonalWatchStatus,
+    category: row.category as PersonalCatalogCategory,
+    associationMalIds: Array.isArray(row.associationMalIds) ? row.associationMalIds.map(Number).filter(Number.isFinite) : [],
+    posterUrl: row.posterUrl ?? null,
+    genres: Array.isArray(row.genres) ? row.genres.map(String) : [],
+    pending: false,
+    source: 'dynamic',
+  }
+}
+
+export async function hydrateManagedCatalog() {
+  if (!supabase) throw new Error('Supabase is not configured.')
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) {
+    hydratedWorks = []
+    hydrated = false
+    return
+  }
+  const { data, error } = await supabase.rpc('get_master_data_snapshot')
+  if (error) throw new Error(`Could not hydrate Personal Catalog from Supabase: ${error.message}`)
+  const payload = (data ?? {}) as any
+  hydratedWorks = (Array.isArray(payload.works) ? payload.works : []).map(mapMasterRow)
+  hydrated = true
+  window.dispatchEvent(new CustomEvent('animefinder:catalog-hydrated', { detail: { count: hydratedWorks.length } }))
+}
+
+export function isManagedCatalogHydrated() { return hydrated }
+
 export function readDynamicCatalogState(): ManagedCatalogState {
-  return safeParse<ManagedCatalogState>(localStorage.getItem(STORAGE_KEY), { dynamicWorks: [] })
+  return { dynamicWorks: hydratedWorks.map((work) => ({ ...work })), savedAt: hydrated ? new Date().toISOString() : undefined }
 }
 
 export function readDraftCatalogState(): ManagedCatalogState | null {
-  return safeParse<ManagedCatalogState | null>(sessionStorage.getItem(DRAFT_KEY), null)
+  return draftState ? { ...draftState, dynamicWorks: draftState.dynamicWorks.map((work) => ({ ...work })) } : null
 }
 
 export function writeDraftCatalogState(dynamicWorks: ManagedCatalogWork[]) {
-  sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ dynamicWorks }))
+  draftState = { dynamicWorks: dynamicWorks.map((work) => ({ ...work })) }
 }
 
 export function clearDraftCatalogState() {
-  sessionStorage.removeItem(DRAFT_KEY)
-}
-
-function writeLocalState(dynamicWorks: ManagedCatalogWork[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ dynamicWorks: dynamicWorks.map((work) => ({ ...work, pending: false, source: 'dynamic' as const })), savedAt: new Date().toISOString() }))
-}
-
-function mergeWorks(dynamicWorks: ManagedCatalogWork[]) {
-  const merged = new Map<string, ManagedCatalogWork>()
-  for (const work of snapshotWorks()) merged.set(work.id, work)
-  for (const work of dynamicWorks) merged.set(work.id, { ...work, source: 'dynamic' })
-  return Array.from(merged.values())
+  draftState = null
 }
 
 export function listManagedCatalogWorks(draft?: ManagedCatalogWork[]): ManagedCatalogWork[] {
-  return mergeWorks(draft ?? readDynamicCatalogState().dynamicWorks)
+  return (draft ?? hydratedWorks).map((work) => ({ ...work }))
 }
 
 export function listManagedCategory(category: PersonalCatalogCategory, draft?: ManagedCatalogWork[]) {
@@ -103,7 +137,7 @@ export function listManagedCategory(category: PersonalCatalogCategory, draft?: M
 }
 
 export function createManagedWorkFromAnime(anime: Anime, displayName: string, category: PersonalCatalogCategory, rank: number | null): ManagedCatalogWork {
-  const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `local-${Date.now()}-${anime.malId}`
+  const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `work-${Date.now()}-${anime.malId}`
   return {
     id,
     displayName: displayName.trim() || anime.title,
@@ -122,6 +156,7 @@ export function createManagedWorkFromAnime(anime: Anime, displayName: string, ca
     category,
     associationMalIds: [anime.malId],
     posterUrl: anime.imageUrl ?? anime.largeImageUrl ?? null,
+    genres: anime.genres.map((genre) => genre.name),
     pending: true,
     source: 'dynamic',
   }
@@ -191,36 +226,20 @@ export function managedWatchedRows(): WatchedAnime[] {
   return rows
 }
 
+/** Temporary in-memory association used before Save; never browser-persisted. */
 export function associateMalIdLocally(workId: string, malId: number): ManagedCatalogWork[] {
-  const dynamicWorks = readDynamicCatalogState().dynamicWorks
-  const source = listManagedCatalogWorks(dynamicWorks).find((work) => work.id === workId)
-  if (!source) return dynamicWorks
-  const override: ManagedCatalogWork = {
+  const source = hydratedWorks.find((work) => work.id === workId)
+  if (!source) return hydratedWorks
+  hydratedWorks = upsertDynamicWork(hydratedWorks, {
     ...source,
     associationMalIds: Array.from(new Set([...source.associationMalIds, malId])),
     source: 'dynamic',
-  }
-  const next = upsertDynamicWork(dynamicWorks, override)
-  writeLocalState(next)
-  return next
+  })
+  return listManagedCatalogWorks()
 }
 
-async function currentUserId() {
-  if (!supabase) return null
-  const { data } = await supabase.auth.getUser()
-  return data.user?.id ?? null
-}
-
-export async function saveManagedCatalog(dynamicWorks: ManagedCatalogWork[]): Promise<'supabase' | 'local'> {
-  const clean = dynamicWorks.map((work) => ({ ...work, pending: false, source: 'dynamic' as const }))
-  writeLocalState(clean)
-  clearDraftCatalogState()
-
-  if (!supabase) return 'local'
-  const userId = await currentUserId()
-  if (!userId) return 'local'
-
-  const payload = clean.map((work) => ({
+function payloadFor(work: ManagedCatalogWork) {
+  return {
     id: work.id,
     display_name: work.displayName,
     primary_mal_id: work.primaryMalId,
@@ -235,22 +254,33 @@ export async function saveManagedCatalog(dynamicWorks: ManagedCatalogWork[]): Pr
     original_name: work.originalName,
     mal_url: work.malUrl,
     association_mal_ids: work.associationMalIds,
-  }))
+  }
+}
 
-  const { error } = await supabase.rpc('save_personal_catalog_batch', { p_works: payload })
-  if (error) return 'local'
+export async function saveManagedCatalog(dynamicWorks: ManagedCatalogWork[]): Promise<'supabase'> {
+  if (!supabase) throw new Error('Supabase is not configured; Personal Catalog cannot be saved.')
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) throw new Error('Sign in before saving the Personal Catalog.')
+  const clean = dynamicWorks.map((work) => ({ ...work, pending: false, source: 'dynamic' as const }))
+  const { error } = await supabase.rpc('save_personal_catalog_batch', { p_works: clean.map(payloadFor) })
+  if (error) throw new Error(`Personal Catalog save failed: ${error.message}`)
+  hydratedWorks = clean
+  clearDraftCatalogState()
+  await hydrateManagedCatalog()
   return 'supabase'
 }
 
-export async function associateExternalEntry(work: ManagedCatalogWork, malId: number): Promise<'supabase' | 'local'> {
-  const dynamic = associateMalIdLocally(work.id, malId)
-  return saveManagedCatalog(dynamic)
+export async function associateExternalEntry(work: ManagedCatalogWork, malId: number): Promise<'supabase'> {
+  const next = listManagedCatalogWorks().map((row) => row.id === work.id
+    ? { ...row, associationMalIds: Array.from(new Set([...row.associationMalIds, malId])) }
+    : row)
+  return saveManagedCatalog(next)
 }
 
 export async function createAndSaveManagedWork(anime: Anime, displayName: string, category: PersonalCatalogCategory = 'watched') {
   const rank = category === 'watched' ? listManagedCategory('watched').length + 1 : null
   const work = createManagedWorkFromAnime(anime, displayName, category, rank)
-  const next = upsertDynamicWork(readDynamicCatalogState().dynamicWorks, work)
+  const next = upsertDynamicWork(listManagedCatalogWorks(), work)
   await saveManagedCatalog(next)
   return work
 }
