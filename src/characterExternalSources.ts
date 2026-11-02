@@ -33,8 +33,11 @@ function readLocal(): ExternalSourceState {
 function writeLocal(state: ExternalSourceState, changed?: CharacterExternalSource) {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)) } catch { /* local cache best effort */ }
   window.dispatchEvent(new CustomEvent('animefinder:character-external-sources-updated', { detail: changed ?? null }))
-  if (changed?.provider === 'fandom' && changed.confirmed) {
-    window.dispatchEvent(new CustomEvent('animefinder:fandom-match-confirmed', { detail: changed }))
+}
+
+function notifyConfirmed(source: CharacterExternalSource) {
+  if (source.provider === 'fandom' && source.confirmed) {
+    window.dispatchEvent(new CustomEvent('animefinder:fandom-match-confirmed', { detail: source }))
   }
 }
 
@@ -110,7 +113,10 @@ export async function saveExternalSource(source: Omit<CharacterExternalSource, '
   writeLocal(state, saved)
 
   const uid = await currentUserId()
-  if (!uid || !supabase) return saved
+  if (!uid || !supabase) {
+    notifyConfirmed(saved)
+    return saved
+  }
 
   const { error } = await supabase.from('personal_character_external_sources').upsert({
     user_id: uid,
@@ -139,6 +145,7 @@ export async function saveExternalSource(source: Omit<CharacterExternalSource, '
       message: error.message,
       missingMigration: missingRelation(error),
     })
+    notifyConfirmed(saved)
     return saved
   }
 
@@ -146,6 +153,7 @@ export async function saveExternalSource(source: Omit<CharacterExternalSource, '
   const next = readLocal()
   next[key(saved.personalWorkId, saved.personalCharacterId, saved.provider)] = saved
   writeLocal(next, saved)
+  notifyConfirmed(saved)
   return saved
 }
 
