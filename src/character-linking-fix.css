@@ -1,0 +1,121 @@
+/* AnimeFinder — Character Linking + Personal Knowledge UI fix */
+
+/* Keep the three Personal Knowledge columns visually independent. */
+.personal-knowledge-details-grid {
+  align-items: start !important;
+}
+
+.personal-knowledge-details-card.comment-card {
+  display: block !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.personal-knowledge-comment-shell {
+  position: relative;
+  max-height: 10.2em;
+  overflow: hidden;
+  transition: max-height .18s ease;
+}
+
+.personal-knowledge-comment-shell > p {
+  margin: 0 !important;
+  padding-right: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  white-space: pre-wrap;
+  line-height: 1.62;
+}
+
+.personal-knowledge-comment-shell:not(.expanded)::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3.8em;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--surface) 88%);
+}
+
+.personal-knowledge-comment-shell.expanded {
+  max-height: none;
+  overflow: visible;
+}
+
+.personal-knowledge-comment-toggle {
+  margin-top: 8px;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.personal-knowledge-details-card.comment-card > small {
+  margin-top: 10px !important;
+  padding-top: 0 !important;
+}
+
+.character-provider-error {
+  display: grid;
+  gap: 6px;
+  margin: 14px 20px;
+}
+.character-provider-error small { color: var(--muted); }
+.character-provider-error .ghost-button { justify-self: start; margin-top: 3px; }
+.compact-notice { margin: 8px 0; }
+
+.character-manual-heading > div { display: grid; gap: 2px; }
+.character-manual-heading small { color: var(--muted); font-size: 10px; }
+
+/* Preserve AnimeFinder scrollbar identity on all new/related scroll surfaces. */
+.personal-knowledge-details-section,
+.character-profile-modal,
+.character-link-modal,
+.character-search-results,
+.ai-enrichment-workspace {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) color-mix(in srgb, var(--surface) 82%, white 18%);
+}
+.personal-knowledge-details-section::-webkit-scrollbar,
+.character-profile-modal::-webkit-scrollbar,
+.character-link-modal::-webkit-scrollbar,
+.character-search-results::-webkit-scrollbar,
+.ai-enrichment-workspace::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+.personal-knowledge-details-section::-webkit-scrollbar-track,
+.character-profile-modal::-webkit-scrollbar-track,
+.character-link-modal::-webkit-scrollbar-track,
+.character-search-results::-webkit-scrollbar-track,
+.ai-enrichment-workspace::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--surface) 82%, white 18%);
+  border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--border));
+  border-radius: 999px;
+}
+.personal-knowledge-details-section::-webkit-scrollbar-thumb,
+.character-profile-modal::-webkit-scrollbar-thumb,
+.character-link-modal::-webkit-scrollbar-thumb,
+.character-search-results::-webkit-scrollbar-thumb,
+.ai-enrichment-workspace::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 82%, white 18%), var(--accent));
+  border: 2px solid color-mix(in srgb, var(--surface) 82%, white 18%);
+  border-radius: 999px;
+}
+.personal-knowledge-details-section::-webkit-scrollbar-thumb:hover,
+.character-profile-modal::-webkit-scrollbar-thumb:hover,
+.character-link-modal::-webkit-scrollbar-thumb:hover,
+.character-search-results::-webkit-scrollbar-thumb:hover,
+.ai-enrichment-workspace::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 90%, white 10%);
+}
+
+@media (max-width: 1050px) {
+  .personal-knowledge-details-grid { align-items: stretch !important; }
+  .personal-knowledge-details-card.comment-card { grid-column: 1 / -1; }
+  .personal-knowledge-comment-shell { max-height: 11em; }
+}
+
+@media (max-width: 720px) {
+  .personal-knowledge-details-grid { align-items: start !important; }
+  .personal-knowledge-comment-shell { max-height: 10.5em; }
+}
