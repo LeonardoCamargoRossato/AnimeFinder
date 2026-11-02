@@ -21,6 +21,7 @@ export class GeminiProvider implements AIProvider {
           conversation: request.conversation.slice(-10),
           currentIntent: request.currentIntent,
           preferredModel: request.preferredModel,
+          conversationMetadata: request.conversationMetadata ?? null,
         },
       })
       if (error) throw error
@@ -29,6 +30,9 @@ export class GeminiProvider implements AIProvider {
       if (typeof row.error === 'string') throw new Error(row.error)
       const reply = typeof row.reply === 'string' ? row.reply.trim() : ''
       if (!reply) throw new Error('Hamlet returned an empty response.')
+      const metadataRow = row.conversationMetadata && typeof row.conversationMetadata === 'object'
+        ? row.conversationMetadata as Record<string, unknown>
+        : null
       return {
         reply,
         intent: normalizeHamletIntent(row.intent, request.currentIntent),
@@ -36,6 +40,11 @@ export class GeminiProvider implements AIProvider {
         model: typeof row.model === 'string' ? row.model : undefined,
         preferredModel: typeof row.preferredModel === 'string' ? row.preferredModel : request.preferredModel,
         fallbackUsed: row.fallbackUsed === true,
+        conversationMetadata: metadataRow ? {
+          ready: metadataRow.ready === true,
+          title: typeof metadataRow.title === 'string' ? metadataRow.title.trim().slice(0, 120) : null,
+          description: typeof metadataRow.description === 'string' ? metadataRow.description.trim().slice(0, 360) : null,
+        } : undefined,
       }
     } catch (error) {
       const raw = error instanceof Error ? error.message : String(error)
