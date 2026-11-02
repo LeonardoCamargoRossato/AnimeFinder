@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { personalCatalogCategories, type PersonalCatalogCategory } from './personalCatalog'
-import { backfillPersonalCatalogSynopsis, type SynopsisBackfillProgress } from './synopsis'
+import { backfillPersonalCatalogSynopsis, backfillSynopsisTranslationsPtBr, type SynopsisBackfillProgress } from './synopsis'
 import { backfillPersistedGenres, characterKnowledgeJson, loadMasterDataSnapshot, type MasterDataSnapshot, type MasterDataWork, type MetadataBackfillProgress } from './masterData'
 
 const PORTFOLIO_URL='https://leonardocamargorossato.github.io/LCR-SolutionsArchitecture-IA-Quantum/#/'
@@ -48,20 +48,24 @@ function printTable(snapshot:MasterDataSnapshot,category:PersonalCatalogCategory
 
 function Viewer({title,data,onClose}:{title:string;data:unknown;onClose:()=>void}){return createPortal(<div className="master-json-backdrop" onMouseDown={(e)=>{if(e.currentTarget===e.target)onClose()}}><section className="master-json-modal"><header><div><span className="eyebrow">DETAIL VIEW</span><h2>{title}</h2></div><button onClick={onClose}>×</button></header>{typeof data==='string'?<div className="master-long-reader">{data}</div>:<pre>{JSON.stringify(data,null,2)}</pre>}</section></div>,document.body)}
 
+type BackfillKind='genres'|'synopsis'|'translations'
+
 function MasterTable({onClose}:{onClose:()=>void}){
   const [snapshot,setSnapshot]=useState<MasterDataSnapshot|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState('')
-  const [category,setCategory]=useState<PersonalCatalogCategory>('watched'),[query,setQuery]=useState(''),[viewer,setViewer]=useState<{title:string;data:unknown}|null>(null),[exportOpen,setExportOpen]=useState(false)
-  const [synopsisProgress,setSynopsisProgress]=useState<SynopsisBackfillProgress|null>(null),[genreProgress,setGenreProgress]=useState<MetadataBackfillProgress|null>(null),[backfill,setBackfill]=useState<'genres'|'synopsis'|null>(null)
+  const [category,setCategory]=useState<PersonalCatalogCategory>('watched'),[query,setQuery]=useState(''),[viewer,setViewer]=useState<{title:string;data:unknown}|null>(null),[exportOpen,setExportOpen]=useState(false),[backfillOpen,setBackfillOpen]=useState(false)
+  const [synopsisProgress,setSynopsisProgress]=useState<SynopsisBackfillProgress|null>(null),[translationProgress,setTranslationProgress]=useState<SynopsisBackfillProgress|null>(null),[genreProgress,setGenreProgress]=useState<MetadataBackfillProgress|null>(null),[backfill,setBackfill]=useState<BackfillKind|null>(null)
   const [refreshing,setRefreshing]=useState(false),[updatedLabel,setUpdatedLabel]=useState('')
 
   async function refresh(manual=false){if(manual)setRefreshing(true);setLoading(!snapshot);setError('');try{const next=await loadMasterDataSnapshot();setSnapshot(next);setUpdatedLabel(manual?'Updated just now':'')}catch(reason){setError(reason instanceof Error?reason.message:'Could not load Supabase Master Data.')}finally{setLoading(false);setRefreshing(false)}}
   useEffect(()=>{void refresh(false)},[])
   const rows=useMemo(()=>{if(!snapshot)return[];const term=query.trim().toLowerCase();return snapshot.works.filter((w)=>w.category===category && (!term||[w.displayName,w.englishName,w.originalName,w.originalObservations,w.comment,...w.keywords,...w.genres].filter(Boolean).join(' ').toLowerCase().includes(term)))},[snapshot,category,query])
 
-  async function runGenres(){if(!snapshot||backfill)return;setBackfill('genres');try{await backfillPersistedGenres(snapshot,(p)=>setGenreProgress(p));await refresh(true)}finally{setBackfill(null)}}
-  async function runSynopsis(){if(backfill)return;setBackfill('synopsis');try{await backfillPersonalCatalogSynopsis((p)=>setSynopsisProgress(p));await refresh(true)}finally{setBackfill(null)}}
-  const progress=backfill==='genres'?genreProgress:backfill==='synopsis'?synopsisProgress:null
+  async function runGenres(){if(!snapshot||backfill)return;setBackfillOpen(false);setBackfill('genres');try{await backfillPersistedGenres(snapshot,(p)=>setGenreProgress(p));await refresh(true)}finally{setBackfill(null)}}
+  async function runSynopsis(){if(backfill)return;setBackfillOpen(false);setBackfill('synopsis');try{await backfillPersonalCatalogSynopsis((p)=>setSynopsisProgress(p));await refresh(true)}finally{setBackfill(null)}}
+  async function runTranslations(){if(backfill)return;setBackfillOpen(false);setBackfill('translations');try{await backfillSynopsisTranslationsPtBr((p)=>setTranslationProgress(p));await refresh(true)}finally{setBackfill(null)}}
+  const progress=backfill==='genres'?genreProgress:backfill==='synopsis'?synopsisProgress:backfill==='translations'?translationProgress:null
   const percent=progress?.total?Math.round((progress.processed/progress.total)*100):0
+  const backfillLabel=backfill==='genres'?'Genres':backfill==='synopsis'?'Synopsis':backfill==='translations'?'Synopsis PT-BR':'Backfill'
 
   return createPortal(<div className="master-data-backdrop"><section className="master-data-modal" role="dialog" aria-modal="true" aria-label="AnimeFinder Master Data Table">
     <header className="master-data-header"><div><span className="eyebrow">ANIMEFINDER MASTER DATA</span><h1>Master Data Table</h1><p>Human-readable projection of the authenticated Supabase dataset.</p></div><button className="master-data-close" onClick={onClose}>×</button></header>
@@ -69,11 +73,13 @@ function MasterTable({onClose}:{onClose:()=>void}){
       <div className="master-data-search"><span>⌕</span><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search master data…"/></div>
       <button className="ghost-button master-refresh-button" title="Refresh from Supabase" onClick={()=>void refresh(true)} disabled={refreshing}>{refreshing?'↻ Refreshing…':'↻'}</button>
       {updatedLabel&&<small className="master-refresh-feedback">{updatedLabel}</small>}
-      <button className="ghost-button" disabled={Boolean(backfill)} onClick={()=>void runGenres()}>{backfill==='genres'?`Genres ${percent}%`:'Backfill Genres'}</button>
-      <button className="ghost-button" disabled={Boolean(backfill)} onClick={()=>void runSynopsis()}>{backfill==='synopsis'?`Synopsis ${percent}%`:'Backfill Synopsis'}</button>
-      <div className="master-export-wrap"><button className="primary-button" onClick={()=>setExportOpen((v)=>!v)}>Export</button>{exportOpen&&snapshot&&<div className="master-export-menu"><button onClick={()=>exportCsv(snapshot,category)}>Download CSV</button><button onClick={()=>exportJson(snapshot)}>Download JSON</button><button onClick={()=>void exportPdf(snapshot,category)}>Download PDF</button><button onClick={()=>printTable(snapshot,category)}>Print</button><button disabled title="Google Sheets write scope is not authorized yet.">Export to Google Sheets — not configured</button></div>}</div>
+      <div className="master-export-wrap master-backfill-wrap">
+        <button className="ghost-button" disabled={Boolean(backfill)} onClick={()=>{setBackfillOpen((v)=>!v);setExportOpen(false)}}>{backfill?`${backfillLabel} ${percent}%`:'Backfill ▾'}</button>
+        {backfillOpen&&!backfill&&<div className="master-export-menu master-backfill-menu"><button onClick={()=>void runGenres()}>Backfill Genres</button><button onClick={()=>void runSynopsis()}>Backfill Synopsis</button><button onClick={()=>void runTranslations()}>Backfill Synopsis Translation PT-BR</button></div>}
+      </div>
+      <div className="master-export-wrap"><button className="primary-button" onClick={()=>{setExportOpen((v)=>!v);setBackfillOpen(false)}}>Export</button>{exportOpen&&snapshot&&<div className="master-export-menu"><button onClick={()=>exportCsv(snapshot,category)}>Download CSV</button><button onClick={()=>exportJson(snapshot)}>Download JSON</button><button onClick={()=>void exportPdf(snapshot,category)}>Download PDF</button><button onClick={()=>printTable(snapshot,category)}>Print</button><button disabled title="Google Sheets write scope is not authorized yet.">Export to Google Sheets — not configured</button></div>}</div>
     </div>
-    {progress&&backfill&&<div className="master-backfill-status compact-status"><strong>{backfill==='genres'?'Genre':'Synopsis'} backfill: {progress.processed}/{progress.total} ({percent}%)</strong><div className="master-progress"><span style={{width:`${percent}%`}}/></div><small>{progress.succeeded} stored · {progress.missingSource} missing source · {progress.failed} failed</small></div>}
+    {progress&&backfill&&<div className="master-backfill-status compact-status"><strong>{backfillLabel} backfill: {progress.processed}/{progress.total} ({percent}%)</strong><div className="master-progress"><span style={{width:`${percent}%`}}/></div><small>{progress.succeeded} stored · {progress.missingSource} missing source · {progress.failed} failed</small>{progress.currentWork&&<small> · {progress.currentWork}</small>}</div>}
     <nav className="master-data-tabs">{personalCatalogCategories.map((tab)=><button key={tab.id} className={category===tab.id?'active':''} onClick={()=>setCategory(tab.id)}>{tab.label}<span>{snapshot?.categoryCounts[tab.id] ?? 0}</span></button>)}</nav>
     {error&&<div className="notice error">{error}</div>}
     {loading&&<div className="master-data-loading"><span className="spinner"/><strong>Loading Supabase master data…</strong></div>}
