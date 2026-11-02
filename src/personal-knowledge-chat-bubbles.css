@@ -1,0 +1,222 @@
+/* Personal Knowledge conversation hotfix: reuse the visual language of Hamlet AI. */
+
+.pk-chat {
+  padding-left: 26px;
+  padding-right: 26px;
+  gap: 18px;
+}
+
+.pk-chat .pk-message {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  width: fit-content;
+  max-width: 84%;
+  overflow: visible;
+}
+
+.pk-chat .pk-message.assistant {
+  align-self: flex-start;
+  justify-items: start;
+}
+
+.pk-chat .pk-message.user {
+  align-self: flex-end;
+  justify-items: end;
+}
+
+.pk-chat .pk-message.assistant > .pk-avatar {
+  display: none;
+}
+
+.pk-chat .pk-message.assistant::before,
+.pk-chat .pk-message.user::before {
+  display: block;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pk-chat .pk-message.assistant::before {
+  content: 'HAMLET AI';
+  justify-self: start;
+  color: color-mix(in srgb, var(--accent) 78%, var(--text) 22%);
+}
+
+.pk-chat .pk-message.user::before {
+  content: 'YOU';
+  justify-self: end;
+}
+
+.pk-chat .pk-message.assistant > div,
+.pk-chat .pk-message.user > .pk-user-bubble {
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  min-width: 72px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 12px 15px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.10);
+  overflow: visible;
+}
+
+.pk-chat .pk-message.assistant > div {
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 7px 18px 18px 18px;
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
+  color: var(--text);
+}
+
+.pk-chat .pk-message.assistant > div::after {
+  content: '';
+  position: absolute;
+  left: -11px;
+  top: 9px;
+  width: 13px;
+  height: 14px;
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
+  border-left: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+  transform: rotate(4deg);
+  transform-origin: top right;
+  z-index: -1;
+}
+
+.pk-chat .pk-message.user > .pk-user-bubble {
+  border: 1px solid color-mix(in srgb, var(--accent) 78%, #351f76 22%);
+  border-radius: 18px 7px 18px 18px;
+  background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 76%, #351f76 24%));
+  color: #fff;
+}
+
+.pk-chat .pk-message.user > .pk-user-bubble::after {
+  content: '';
+  position: absolute;
+  right: -11px;
+  top: 9px;
+  width: 13px;
+  height: 14px;
+  background: color-mix(in srgb, var(--accent) 82%, #351f76 18%);
+  border-right: 1px solid color-mix(in srgb, var(--accent) 78%, #351f76 22%);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 78%, #351f76 22%);
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  transform: rotate(-4deg);
+  transform-origin: top left;
+  z-index: -1;
+}
+
+.pk-chat .pk-message p {
+  margin: 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pk-chat .pk-message.user .pk-user-bubble small {
+  color: rgba(255,255,255,.72);
+}
+
+.pk-chat .pk-collapsible-bubble {
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.pk-chat .pk-collapsible-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0,0,0,.16);
+}
+
+.pk-chat .pk-collapsible-bubble:not(.pk-bubble-expanded) > p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+  max-height: 9.4em;
+}
+
+.pk-chat .pk-bubble-toggle {
+  display: block;
+  margin: 9px 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  opacity: .82;
+  cursor: pointer;
+}
+
+.pk-chat .pk-bubble-toggle:hover,
+.pk-chat .pk-bubble-toggle:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+/* Present the guided action block as another Hamlet-side message. */
+.pk-chat .pk-context-actions.pk-hamlet-action-bubble {
+  position: relative;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 90%;
+  margin-top: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 7px 18px 18px 18px;
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
+  box-shadow: 0 6px 18px rgba(0,0,0,.10);
+}
+
+.pk-chat .pk-context-actions.pk-hamlet-action-bubble::before {
+  content: 'HAMLET AI';
+  position: absolute;
+  left: 7px;
+  bottom: calc(100% + 5px);
+  color: color-mix(in srgb, var(--accent) 78%, var(--text) 22%);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+
+.pk-chat .pk-context-actions.pk-hamlet-action-bubble::after {
+  content: '';
+  position: absolute;
+  left: -11px;
+  top: 9px;
+  width: 13px;
+  height: 14px;
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
+  border-left: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+  transform: rotate(4deg);
+  z-index: -1;
+}
+
+@media (max-width: 680px) {
+  .pk-chat {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .pk-chat .pk-message {
+    max-width: 92%;
+  }
+
+  .pk-chat .pk-message.assistant > div,
+  .pk-chat .pk-message.user > .pk-user-bubble {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .pk-chat .pk-context-actions.pk-hamlet-action-bubble {
+    max-width: 96%;
+  }
+}
