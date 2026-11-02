@@ -1,0 +1,74 @@
+.discover-page.hamlet-mode-active {
+  padding-top: 10px;
+}
+
+.discover-page.hamlet-mode-active .hero {
+  max-width: 1100px;
+  margin: 0 auto 8px;
+}
+
+.discover-page.hamlet-mode-active .hero > .eyebrow {
+  display: none;
+}
+
+.discover-page.hamlet-mode-active .hero > h1 {
+  margin: 0 0 4px;
+  font-size: clamp(1.55rem, 3vw, 2.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+}
+
+.discover-page.hamlet-mode-active .hero > p {
+  max-width: 720px;
+  margin: 0 auto;
+  font-size: .88rem;
+  line-height: 1.4;
+}
+
+.discover-page.hamlet-mode-active .hamlet-mode-tabs-host {
+  margin: 8px 0 0;
+}
+
+.discover-page.hamlet-mode-active .hamlet-workspace-host {
+  margin-top: 8px;
+  scroll-margin-top: 84px;
+}
+
+@media (min-width: 981px) {
+  .discover-page.hamlet-mode-active .hamlet-columns {
+    min-height: 460px;
+  }
+
+  .discover-page.hamlet-mode-active .hamlet-messages {
+    min-height: 220px;
+    max-height: 360px;
+  }
+}
+
+@media (max-width: 680px) {
+  .discover-page.hamlet-mode-active {
+    padding-top: 6px;
+  }
+
+  .discover-page.hamlet-mode-active .hero {
+    margin-bottom: 6px;
+  }
+
+  .discover-page.hamlet-mode-active .hero > h1 {
+    margin-bottom: 0;
+    font-size: 1.35rem;
+  }
+
+  .discover-page.hamlet-mode-active .hero > p {
+    display: none;
+  }
+
+  .discover-page.hamlet-mode-active .hamlet-mode-tabs-host,
+  .discover-page.hamlet-mode-active .hamlet-workspace-host {
+    margin-top: 6px;
+  }
+
+  .discover-page.hamlet-mode-active .hamlet-workspace-host {
+    scroll-margin-top: 76px;
+  }
+}
