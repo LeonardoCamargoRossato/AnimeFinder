@@ -57,7 +57,7 @@ export default function HamletRecommendationsDrawerEnhancer() {
       setControlsHost((current) => current === nextControlsHost ? current : nextControlsHost)
       const renderedCount = nextPanel.querySelectorAll('.hamlet-compact-card').length
       const meta = getLastHamletSearchMeta()
-      setRecommendationCount(meta.catalogTotal || renderedCount)
+      setRecommendationCount(meta.filteredRecommendations || renderedCount)
     }
 
     sync()
