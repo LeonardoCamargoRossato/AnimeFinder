@@ -1,0 +1,140 @@
+/* AnimeFinder — Personal Knowledge V3 */
+.personal-knowledge-v3-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.personal-knowledge-header-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.personal-knowledge-v3-stack {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 14px;
+}
+.personal-knowledge-v3-stack .personal-knowledge-details-card {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.personal-knowledge-v3-stack .comment-card { min-height: 0 !important; }
+.personal-knowledge-v3-stack .personal-knowledge-comment-shell {
+  position: relative;
+  max-height: 9.2em;
+  overflow: hidden;
+  line-height: 1.55;
+}
+.personal-knowledge-v3-stack .personal-knowledge-comment-shell::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2.8em;
+  pointer-events: none;
+  background: linear-gradient(transparent, var(--surface));
+}
+.personal-knowledge-v3-stack .personal-knowledge-comment-shell p { margin: 0; white-space: pre-wrap; }
+.personal-knowledge-v3-stack .personal-knowledge-comment-toggle { margin-top: 8px; align-self: flex-start; }
+.personal-knowledge-keyword-flow {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.personal-knowledge-keyword-flow b {
+  width: auto !important;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  white-space: nowrap;
+}
+.personal-knowledge-v3-stack .character-knowledge-cards-host-container { width: 100%; }
+.personal-knowledge-v3-stack .favorite-character-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+}
+.personal-knowledge-v3-stack .favorite-character-card {
+  grid-template-columns: 52px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.comment-reader-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 17000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 7, 18, .78);
+  backdrop-filter: blur(9px);
+}
+.comment-reader-modal {
+  width: min(940px, 96vw);
+  max-height: 90vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 22px;
+  background: var(--background);
+  color: var(--text);
+  box-shadow: 0 30px 90px rgba(0,0,0,.48);
+}
+.comment-reader-modal.expanded { width: min(1500px, 98vw); max-height: 97vh; }
+.comment-reader-header,
+.comment-reader-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 17px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.comment-reader-header h2 { margin: 3px 0 0; }
+.comment-reader-header-actions { display: flex; gap: 8px; align-items: center; }
+.comment-reader-close {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 23px;
+  cursor: pointer;
+}
+.comment-reader-body { overflow: auto; padding: 22px; }
+.comment-reader-body p { margin: 0; white-space: pre-wrap; line-height: 1.72; text-align: justify; }
+.comment-reader-footer { border-top: 1px solid var(--border); border-bottom: 0; }
+.comment-reader-audio { padding: 0 18px 18px; border-top: 1px solid var(--border); }
+
+.animefinder-fandom-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 19000;
+  max-width: min(460px, calc(100vw - 36px));
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--border));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--background) 92%, var(--accent) 8%);
+  color: var(--text);
+  box-shadow: 0 14px 45px rgba(0,0,0,.36);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .personal-knowledge-v3-heading { flex-direction: column; }
+  .personal-knowledge-header-actions { width: 100%; }
+  .personal-knowledge-header-actions > button { width: 100%; }
+  .personal-knowledge-v3-stack .favorite-character-cards { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+  .comment-reader-backdrop { padding: 5px; }
+  .comment-reader-modal,
+  .comment-reader-modal.expanded { width: 100%; max-height: 99vh; border-radius: 16px; }
+  .comment-reader-header { padding: 14px; align-items: flex-start; }
+  .comment-reader-header-actions .ghost-button { display: none; }
+  .comment-reader-body { padding: 16px; }
+  .comment-reader-footer { padding: 12px 14px; flex-wrap: wrap; }
+}
