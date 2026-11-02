@@ -16,6 +16,7 @@ export interface CharacterExternalSource {
   confirmed: boolean
   updatedAt: string
   storage?: 'supabase' | 'local'
+  verified?: boolean
 }
 
 type ExternalSourceState = Record<string, CharacterExternalSource>
@@ -31,12 +32,12 @@ function readLocal(): ExternalSourceState {
 }
 
 function writeLocal(state: ExternalSourceState, changed?: CharacterExternalSource) {
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)) } catch { /* local cache best effort */ }
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)) } catch { /* best effort mirror */ }
   window.dispatchEvent(new CustomEvent('animefinder:character-external-sources-updated', { detail: changed ?? null }))
 }
 
-function notifyConfirmed(source: CharacterExternalSource) {
-  if (source.provider === 'fandom' && source.confirmed) {
+function notifyVerified(source: CharacterExternalSource) {
+  if (source.provider === 'fandom' && source.confirmed && source.storage === 'supabase' && source.verified) {
     window.dispatchEvent(new CustomEvent('animefinder:fandom-match-confirmed', { detail: source }))
   }
 }
@@ -51,6 +52,37 @@ async function currentUserId() {
 function missingRelation(error: { code?: string; message?: string } | null | undefined) {
   const text = `${error?.code ?? ''} ${error?.message ?? ''}`.toLowerCase()
   return text.includes('42p01') || text.includes('pgrst205') || text.includes('personal_character_external_sources')
+}
+
+function fromRemote(row: any): CharacterExternalSource {
+  const metadata = (row.metadata_json ?? {}) as Record<string, unknown>
+  return {
+    personalWorkId: row.personal_work_id,
+    personalCharacterId: row.personal_character_id,
+    provider: row.provider as CharacterExternalProvider,
+    externalId: String(row.external_id),
+    canonicalName: row.canonical_name,
+    url: row.url,
+    imageUrl: row.image_url,
+    description: typeof metadata.description === 'string' ? metadata.description : null,
+    wikiDomain: typeof metadata.wikiDomain === 'string' ? metadata.wikiDomain : null,
+    metadata,
+    confirmed: Boolean(row.confirmed),
+    updatedAt: row.last_synced_at,
+    storage: 'supabase',
+    verified: true,
+  }
+}
+
+function replaceLocalScope(personalWorkId: string, personalCharacterId: string | undefined, rows: CharacterExternalSource[]) {
+  const state = readLocal()
+  for (const [entryKey, row] of Object.entries(state)) {
+    if (row.personalWorkId !== personalWorkId) continue
+    if (personalCharacterId && row.personalCharacterId !== personalCharacterId) continue
+    delete state[entryKey]
+  }
+  for (const row of rows) state[key(row.personalWorkId, row.personalCharacterId, row.provider)] = row
+  writeLocal(state)
 }
 
 export function getCachedExternalSources(personalWorkId: string, personalCharacterId?: string) {
@@ -73,7 +105,9 @@ export async function loadExternalSources(personalWorkId: string, personalCharac
   if (personalCharacterId) query = query.eq('personal_character_id', personalCharacterId)
   const { data, error } = await query
   if (error) {
-    console.error('AnimeFinder external sources: Supabase read failed; using local cache.', {
+    console.error('AnimeFinder external sources: Supabase read failed.', {
+      operation: 'external_source_read',
+      entity: personalCharacterId ?? personalWorkId,
       code: error.code,
       message: error.message,
       missingMigration: missingRelation(error),
@@ -81,86 +115,104 @@ export async function loadExternalSources(personalWorkId: string, personalCharac
     return local
   }
 
-  const state = readLocal()
-  for (const row of data ?? []) {
-    const metadata = (row.metadata_json ?? {}) as Record<string, unknown>
-    const source: CharacterExternalSource = {
-      personalWorkId: row.personal_work_id,
-      personalCharacterId: row.personal_character_id,
-      provider: row.provider as CharacterExternalProvider,
-      externalId: String(row.external_id),
-      canonicalName: row.canonical_name,
-      url: row.url,
-      imageUrl: row.image_url,
-      description: typeof metadata.description === 'string' ? metadata.description : null,
-      wikiDomain: typeof metadata.wikiDomain === 'string' ? metadata.wikiDomain : null,
-      metadata,
-      confirmed: Boolean(row.confirmed),
-      updatedAt: row.last_synced_at,
-      storage: 'supabase',
-    }
-    state[key(source.personalWorkId, source.personalCharacterId, source.provider)] = source
-  }
-  writeLocal(state)
-  return Object.values(state).filter((row) => row.personalWorkId === personalWorkId && (!personalCharacterId || row.personalCharacterId === personalCharacterId))
+  const remote = (data ?? []).map(fromRemote)
+  replaceLocalScope(personalWorkId, personalCharacterId, remote)
+  return remote
 }
 
-export async function saveExternalSource(source: Omit<CharacterExternalSource, 'updatedAt' | 'storage'>): Promise<CharacterExternalSource> {
-  const timestamp = new Date().toISOString()
-  let saved: CharacterExternalSource = { ...source, updatedAt: timestamp, storage: 'local' }
-  const state = readLocal()
-  state[key(saved.personalWorkId, saved.personalCharacterId, saved.provider)] = saved
-  writeLocal(state, saved)
+async function readBackSource(uid: string, source: Omit<CharacterExternalSource, 'updatedAt' | 'storage' | 'verified'>) {
+  if (!supabase) return null
+  const { data, error } = await supabase.from('personal_character_external_sources')
+    .select('personal_work_id,personal_character_id,provider,external_id,canonical_name,url,image_url,metadata_json,confirmed,last_synced_at')
+    .eq('user_id', uid)
+    .eq('personal_work_id', source.personalWorkId)
+    .eq('personal_character_id', source.personalCharacterId)
+    .eq('provider', source.provider)
+    .maybeSingle()
+  if (error || !data) {
+    console.error('AnimeFinder external source read-back failed.', {
+      operation: 'external_source_read_back',
+      entity: source.personalCharacterId,
+      provider: source.provider,
+      code: error?.code,
+      message: error?.message,
+    })
+    return null
+  }
+  return fromRemote(data)
+}
 
+export async function saveExternalSource(source: Omit<CharacterExternalSource, 'updatedAt' | 'storage' | 'verified'>): Promise<CharacterExternalSource> {
+  const timestamp = new Date().toISOString()
+  const optimistic: CharacterExternalSource = { ...source, updatedAt: timestamp, storage: 'local', verified: false }
   const uid = await currentUserId()
+
   if (!uid || !supabase) {
-    notifyConfirmed(saved)
-    return saved
+    if (source.provider === 'fandom') {
+      throw new Error('Fandom match was not saved because Supabase verification is unavailable. Sign in and run the V4 data-integrity migration.')
+    }
+    const state = readLocal()
+    state[key(optimistic.personalWorkId, optimistic.personalCharacterId, optimistic.provider)] = optimistic
+    writeLocal(state, optimistic)
+    return optimistic
   }
 
   const { error } = await supabase.from('personal_character_external_sources').upsert({
     user_id: uid,
-    personal_work_id: saved.personalWorkId,
-    personal_character_id: saved.personalCharacterId,
-    provider: saved.provider,
-    external_id: saved.externalId,
-    canonical_name: saved.canonicalName,
-    url: saved.url ?? null,
-    image_url: saved.imageUrl ?? null,
+    personal_work_id: source.personalWorkId,
+    personal_character_id: source.personalCharacterId,
+    provider: source.provider,
+    external_id: source.externalId,
+    canonical_name: source.canonicalName,
+    url: source.url ?? null,
+    image_url: source.imageUrl ?? null,
     metadata_json: {
-      ...(saved.metadata ?? {}),
-      description: saved.description ?? null,
-      wikiDomain: saved.wikiDomain ?? null,
+      ...(source.metadata ?? {}),
+      description: source.description ?? null,
+      wikiDomain: source.wikiDomain ?? null,
     },
-    confirmed: saved.confirmed,
-    last_synced_at: saved.updatedAt,
+    confirmed: source.confirmed,
+    last_synced_at: timestamp,
   }, { onConflict: 'user_id,personal_work_id,personal_character_id,provider' })
 
   if (error) {
-    console.error('AnimeFinder external sources: Supabase save failed; source kept locally.', {
-      provider: saved.provider,
-      personalWorkId: saved.personalWorkId,
-      personalCharacterId: saved.personalCharacterId,
+    console.error('AnimeFinder external source save failed.', {
+      operation: 'external_source_write',
+      entity: source.personalCharacterId,
+      provider: source.provider,
       code: error.code,
       message: error.message,
       missingMigration: missingRelation(error),
     })
-    notifyConfirmed(saved)
-    return saved
+    if (source.provider === 'fandom') throw new Error(`Fandom persistence failed: ${error.message}`)
+    const state = readLocal()
+    state[key(optimistic.personalWorkId, optimistic.personalCharacterId, optimistic.provider)] = optimistic
+    writeLocal(state, optimistic)
+    return optimistic
   }
 
-  saved = { ...saved, storage: 'supabase' }
-  const next = readLocal()
-  next[key(saved.personalWorkId, saved.personalCharacterId, saved.provider)] = saved
-  writeLocal(next, saved)
-  notifyConfirmed(saved)
-  return saved
+  const verified = await readBackSource(uid, source)
+  const matches = verified
+    && verified.provider === source.provider
+    && verified.externalId === String(source.externalId)
+    && verified.canonicalName === source.canonicalName
+    && (verified.url ?? null) === (source.url ?? null)
+    && (verified.imageUrl ?? null) === (source.imageUrl ?? null)
+    && verified.confirmed === source.confirmed
+
+  if (!matches) {
+    if (source.provider === 'fandom') throw new Error('Fandom write completed but Supabase read-back verification failed. No success state was shown.')
+    return optimistic
+  }
+
+  const state = readLocal()
+  state[key(verified!.personalWorkId, verified!.personalCharacterId, verified!.provider)] = verified!
+  writeLocal(state, verified!)
+  notifyVerified(verified!)
+  return verified!
 }
 
 export async function removeExternalSource(personalWorkId: string, personalCharacterId: string, provider: CharacterExternalProvider) {
-  const state = readLocal()
-  delete state[key(personalWorkId, personalCharacterId, provider)]
-  writeLocal(state)
   const uid = await currentUserId()
   if (uid && supabase) {
     const { error } = await supabase.from('personal_character_external_sources').delete()
@@ -169,7 +221,11 @@ export async function removeExternalSource(personalWorkId: string, personalChara
       .eq('personal_character_id', personalCharacterId)
       .eq('provider', provider)
     if (error) {
-      console.error('AnimeFinder external sources: Supabase delete failed.', { code: error.code, message: error.message })
+      console.error('AnimeFinder external sources: Supabase delete failed.', { operation: 'external_source_delete', entity: personalCharacterId, provider, code: error.code, message: error.message })
+      throw new Error(error.message)
     }
   }
+  const state = readLocal()
+  delete state[key(personalWorkId, personalCharacterId, provider)]
+  writeLocal(state)
 }
