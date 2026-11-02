@@ -1,229 +1,323 @@
-import { listAnimeComments, type AnimeComment } from './comments'
-import {
-  getCachedPersonalKnowledgeSummaries,
-  loadPersonalKnowledgeSummaries,
-  type PersonalKnowledgeSummary,
-} from './aiPersonalKnowledge'
-import { getCachedCharacterLinks } from './characterKnowledge'
-import { getCachedExternalSources } from './characterExternalSources'
-import { getCachedSynopsisRecords, type StoredSynopsisRecord } from './synopsis'
-import { listManagedCatalogWorks, type ManagedCatalogWork } from './personalCatalogManager'
+import { animeProvider } from './providers'
+import { listManagedCatalogWorks } from './personalCatalogManager'
+import type { PersonalCatalogCategory } from './personalCatalog'
 import { isSupabaseConfigured, supabase } from './supabase'
 
+export interface MasterExternalSourceProjection {
+  externalId: string
+  canonicalName: string
+  url?: string | null
+  imageUrl?: string | null
+  metadata?: Record<string, unknown>
+  confirmed?: boolean
+  lastSyncedAt?: string | null
+}
+
 export interface MasterCharacterProjection {
+  id?: string
   rank: number
   name: string
-  personalComment: string
+  comment: string
   keywords: string[]
   externalSources: {
-    jikan?: { characterId: string; canonicalName: string; myAnimeListUrl?: string | null; imageUrl?: string | null }
-    fandom?: { externalId: string; canonicalName: string; url?: string | null; wikiDomain?: string | null; imageUrl?: string | null }
+    jikan?: MasterExternalSourceProjection
+    fandom?: MasterExternalSourceProjection
   }
+}
+
+export interface MasterSynopsisProjection {
+  original: string | null
+  ptBR: string | null
+  provider: string | null
+  sourceLanguage: string | null
+  fetchedAt: string | null
+  translatedAt: string | null
+  status: 'complete' | 'original_only' | 'missing_source' | 'failed' | null
+  lastError: string | null
+}
+
+export interface MasterDataAuditFlags {
+  hasMalId: boolean
+  hasGenres: boolean
+  hasSynopsisOriginal: boolean
+  hasSynopsisPtBr: boolean
+  hasPersonalComment: boolean
+  hasKeywords: boolean
+  hasCharacters: boolean
+  hasCharacterExternalLinks: boolean
+}
+
+export interface MasterDataWork {
+  id: string
+  displayName: string
+  primaryMalId: number | null
+  category: PersonalCatalogCategory
+  watchStatus: string
+  myRanked: number | null
+  originalObservations: string | null
+  comment: string
+  posterUrl: string | null
+  malScore: number | null
+  englishName: string | null
+  originalName: string | null
+  malUrl: string | null
+  associationMalIds: number[]
+  keywords: string[]
+  genres: string[]
+  metadataProvider: string | null
+  metadataFetchedAt: string | null
+  synopsis: MasterSynopsisProjection
+  characterKnowledge: MasterCharacterProjection[]
+  audit: MasterDataAuditFlags
 }
 
 export interface MasterDataSnapshot {
-  works: ManagedCatalogWork[]
-  comments: Map<number, AnimeComment>
-  summaries: Map<string, PersonalKnowledgeSummary>
-  synopsis: Map<string, StoredSynopsisRecord>
-  characterKnowledge: Map<string, MasterCharacterProjection[]>
+  source: 'supabase'
+  generatedAt: string
+  totalWorks: number
+  categoryCounts: Record<string, number>
+  works: MasterDataWork[]
 }
 
-type LocalProfile = {
-  personalWorkId: string
-  characters?: Array<{
-    id: string
-    name: string
-    rank?: number
-    confirmed?: boolean
-    commentVersions?: Array<{ versionNumber?: number; content?: string }>
-    keywords?: Array<{ label?: string; rank?: number; confirmed?: boolean }>
-  }>
+export interface CatalogIntegrityAudit {
+  databaseCount: number
+  frontendReferenceCount: number
+  missingInDatabase: string[]
+  extraInDatabase: string[]
 }
 
-function chunk<T>(rows: T[], size = 45) {
-  const result: T[][] = []
-  for (let index = 0; index < rows.length; index += size) result.push(rows.slice(index, index + size))
-  return result
+export interface MetadataBackfillProgress {
+  total: number
+  alreadyPersisted: number
+  processed: number
+  succeeded: number
+  missingSource: number
+  failed: number
+  currentWork?: string
 }
 
-async function currentUserId() {
-  if (!isSupabaseConfigured || !supabase) return null
-  const { data, error } = await supabase.auth.getUser()
-  if (error || !data.user) return null
-  return data.user.id
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : []
 }
 
-function readLocalProfiles(): Record<string, LocalProfile> {
-  try { return JSON.parse(localStorage.getItem('animefinder.personalKnowledge.v1') ?? '{}') as Record<string, LocalProfile> } catch { return {} }
-}
-
-function localCharacterProjection(workId: string): MasterCharacterProjection[] {
-  const profile = readLocalProfiles()[workId]
-  if (!profile) return []
-  const sources = getCachedExternalSources(workId)
-  const legacy = getCachedCharacterLinks(workId)
-  return (profile.characters ?? [])
-    .filter((row) => row.confirmed)
-    .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
-    .map((row, index) => {
-      const sourceRows = sources.filter((source) => source.personalCharacterId === row.id && source.confirmed)
-      const jikanSource = sourceRows.find((source) => source.provider === 'jikan')
-      const fandomSource = sourceRows.find((source) => source.provider === 'fandom')
-      const legacyJikan = legacy.find((link) => link.personalCharacterId === row.id)
-      const comment = [...(row.commentVersions ?? [])].sort((a, b) => (a.versionNumber ?? 0) - (b.versionNumber ?? 0)).at(-1)?.content ?? ''
-      const keywords = (row.keywords ?? []).filter((item) => item.confirmed).sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999)).map((item) => item.label ?? '').filter(Boolean)
-      const canonical = jikanSource?.canonicalName ?? legacyJikan?.canonicalName ?? fandomSource?.canonicalName ?? row.name
-      return {
-        rank: Number(row.rank) || index + 1,
-        name: canonical,
-        personalComment: comment,
-        keywords,
-        externalSources: {
-          jikan: jikanSource || legacyJikan ? {
-            characterId: jikanSource?.externalId ?? String(legacyJikan!.providerCharacterId),
-            canonicalName: jikanSource?.canonicalName ?? legacyJikan!.canonicalName,
-            myAnimeListUrl: jikanSource?.url ?? `https://myanimelist.net/character/${legacyJikan!.providerCharacterId}`,
-            imageUrl: jikanSource?.imageUrl ?? legacyJikan?.imageUrl ?? null,
-          } : undefined,
-          fandom: fandomSource ? {
-            externalId: fandomSource.externalId,
-            canonicalName: fandomSource.canonicalName,
-            url: fandomSource.url,
-            wikiDomain: fandomSource.wikiDomain,
-            imageUrl: fandomSource.imageUrl,
-          } : undefined,
-        },
-      }
-    })
-}
-
-async function loadSynopsisBatch(workIds: string[]) {
-  const result = getCachedSynopsisRecords(workIds)
-  const uid = await currentUserId()
-  if (!uid || !supabase || !workIds.length) return result
-  for (const ids of chunk(workIds)) {
-    const { data, error } = await supabase.from('personal_work_synopsis')
-      .select('personal_work_id,mal_id,synopsis_original,synopsis_pt_br,synopsis_source,synopsis_source_language,status,last_error,synopsis_fetched_at,updated_at')
-      .eq('user_id', uid)
-      .in('personal_work_id', ids)
-    if (error) {
-      console.error('AnimeFinder Master Data: synopsis batch read failed.', { code: error.code, message: error.message })
-      break
-    }
-    for (const row of data ?? []) {
-      result.set(row.personal_work_id, {
-        personalWorkId: row.personal_work_id,
-        malId: row.mal_id == null ? null : Number(row.mal_id),
-        original: row.synopsis_original ?? null,
-        portuguese: row.synopsis_pt_br ?? null,
-        source: row.synopsis_source === 'AniList fallback' ? 'AniList fallback' : row.synopsis_source ? 'MyAnimeList catalogue' : null,
-        sourceLanguage: row.synopsis_source_language ?? null,
-        status: row.status,
-        lastError: row.last_error ?? null,
-        translationError: row.status === 'original_only' ? row.last_error ?? undefined : undefined,
-        fetchedAt: row.synopsis_fetched_at ?? row.updated_at ?? null,
-        storage: 'supabase',
-      })
-    }
+function normalizeCharacter(row: any): MasterCharacterProjection {
+  const sources = row?.externalSources && typeof row.externalSources === 'object' ? row.externalSources : {}
+  return {
+    id: typeof row?.id === 'string' ? row.id : undefined,
+    rank: Number(row?.rank) || 1,
+    name: String(row?.name ?? ''),
+    comment: String(row?.comment ?? ''),
+    keywords: asArray<string>(row?.keywords).map(String),
+    externalSources: {
+      jikan: sources.jikan ? { ...sources.jikan, externalId: String(sources.jikan.externalId ?? '') } : undefined,
+      fandom: sources.fandom ? { ...sources.fandom, externalId: String(sources.fandom.externalId ?? '') } : undefined,
+    },
   }
-  return result
 }
 
-async function fetchRows(table: string, select: string, workIds: string[], uid: string) {
-  const all: any[] = []
-  if (!supabase) return all
-  for (const ids of chunk(workIds)) {
-    const { data, error } = await supabase.from(table).select(select).eq('user_id', uid).in('personal_work_id', ids)
-    if (error) {
-      console.error(`AnimeFinder Master Data: ${table} batch read failed.`, { code: error.code, message: error.message })
-      return []
-    }
-    all.push(...(data ?? []))
+function normalizeWork(row: any): MasterDataWork {
+  const synopsis = row?.synopsis ?? {}
+  const audit = row?.audit ?? {}
+  return {
+    id: String(row?.id ?? ''),
+    displayName: String(row?.displayName ?? ''),
+    primaryMalId: row?.primaryMalId == null ? null : Number(row.primaryMalId),
+    category: row?.category as PersonalCatalogCategory,
+    watchStatus: String(row?.watchStatus ?? 'unknown'),
+    myRanked: row?.myRanked == null ? null : Number(row.myRanked),
+    originalObservations: row?.originalObservations ?? null,
+    comment: String(row?.comment ?? ''),
+    posterUrl: row?.posterUrl ?? null,
+    malScore: row?.malScore == null ? null : Number(row.malScore),
+    englishName: row?.englishName ?? null,
+    originalName: row?.originalName ?? null,
+    malUrl: row?.malUrl ?? null,
+    associationMalIds: asArray<number>(row?.associationMalIds).map(Number).filter(Number.isFinite),
+    keywords: asArray<string>(row?.keywords).map(String),
+    genres: asArray<string>(row?.genres).map(String),
+    metadataProvider: row?.metadataProvider ?? null,
+    metadataFetchedAt: row?.metadataFetchedAt ?? null,
+    synopsis: {
+      original: synopsis.original ?? null,
+      ptBR: synopsis.ptBR ?? null,
+      provider: synopsis.provider ?? null,
+      sourceLanguage: synopsis.sourceLanguage ?? null,
+      fetchedAt: synopsis.fetchedAt ?? null,
+      translatedAt: synopsis.translatedAt ?? null,
+      status: synopsis.status ?? null,
+      lastError: synopsis.lastError ?? null,
+    },
+    characterKnowledge: asArray<any>(row?.characterKnowledge).map(normalizeCharacter),
+    audit: {
+      hasMalId: Boolean(audit.hasMalId),
+      hasGenres: Boolean(audit.hasGenres),
+      hasSynopsisOriginal: Boolean(audit.hasSynopsisOriginal),
+      hasSynopsisPtBr: Boolean(audit.hasSynopsisPtBr),
+      hasPersonalComment: Boolean(audit.hasPersonalComment),
+      hasKeywords: Boolean(audit.hasKeywords),
+      hasCharacters: Boolean(audit.hasCharacters),
+      hasCharacterExternalLinks: Boolean(audit.hasCharacterExternalLinks),
+    },
   }
-  return all
 }
 
-async function loadCharacterKnowledgeBatch(workIds: string[]) {
-  const result = new Map<string, MasterCharacterProjection[]>()
-  workIds.forEach((workId) => result.set(workId, localCharacterProjection(workId)))
-  const uid = await currentUserId()
-  if (!uid || !supabase || !workIds.length) return result
-
-  const [characters, comments, keywords, sources, legacy] = await Promise.all([
-    fetchRows('personal_work_characters', 'id,personal_work_id,character_name,rank,confirmed', workIds, uid),
-    fetchRows('personal_character_comments', 'personal_work_id,character_id,version_number,content', workIds, uid),
-    fetchRows('personal_character_keywords', 'personal_work_id,character_id,keyword,rank,confirmed', workIds, uid),
-    fetchRows('personal_character_external_sources', 'personal_work_id,personal_character_id,provider,external_id,canonical_name,url,image_url,metadata_json,confirmed', workIds, uid),
-    fetchRows('personal_character_external_links', 'personal_work_id,personal_character_id,provider_character_id,canonical_name,image_url', workIds, uid),
-  ])
-  if (!characters.length) return result
-
-  const commentMap = new Map<string, any[]>()
-  comments.forEach((row) => { const key = `${row.personal_work_id}::${row.character_id}`; const rows = commentMap.get(key) ?? []; rows.push(row); commentMap.set(key, rows) })
-  const keywordMap = new Map<string, any[]>()
-  keywords.forEach((row) => { const key = `${row.personal_work_id}::${row.character_id}`; const rows = keywordMap.get(key) ?? []; rows.push(row); keywordMap.set(key, rows) })
-  const sourceMap = new Map<string, any[]>()
-  sources.filter((row) => row.confirmed).forEach((row) => { const key = `${row.personal_work_id}::${row.personal_character_id}`; const rows = sourceMap.get(key) ?? []; rows.push(row); sourceMap.set(key, rows) })
-  const legacyMap = new Map<string, any>()
-  legacy.forEach((row) => legacyMap.set(`${row.personal_work_id}::${row.personal_character_id}`, row))
-
-  for (const workId of workIds) {
-    const rows = characters.filter((row) => row.personal_work_id === workId && row.confirmed)
-      .sort((a, b) => (Number(a.rank) || 999) - (Number(b.rank) || 999))
-      .map((row, index) => {
-        const key = `${workId}::${row.id}`
-        const latestComment = [...(commentMap.get(key) ?? [])].sort((a, b) => Number(a.version_number) - Number(b.version_number)).at(-1)?.content ?? ''
-        const characterKeywords = (keywordMap.get(key) ?? []).filter((item) => item.confirmed).sort((a, b) => Number(a.rank) - Number(b.rank)).map((item) => item.keyword)
-        const external = sourceMap.get(key) ?? []
-        const jikan = external.find((item) => item.provider === 'jikan')
-        const fandom = external.find((item) => item.provider === 'fandom')
-        const old = legacyMap.get(key)
-        const fandomMeta = (fandom?.metadata_json ?? {}) as Record<string, unknown>
-        return {
-          rank: Number(row.rank) || index + 1,
-          name: jikan?.canonical_name ?? old?.canonical_name ?? fandom?.canonical_name ?? row.character_name,
-          personalComment: latestComment,
-          keywords: characterKeywords,
-          externalSources: {
-            jikan: jikan || old ? {
-              characterId: String(jikan?.external_id ?? old?.provider_character_id),
-              canonicalName: jikan?.canonical_name ?? old?.canonical_name,
-              myAnimeListUrl: jikan?.url ?? `https://myanimelist.net/character/${old?.provider_character_id}`,
-              imageUrl: jikan?.image_url ?? old?.image_url ?? null,
-            } : undefined,
-            fandom: fandom ? {
-              externalId: String(fandom.external_id),
-              canonicalName: fandom.canonical_name,
-              url: fandom.url,
-              wikiDomain: typeof fandomMeta.wikiDomain === 'string' ? fandomMeta.wikiDomain : null,
-              imageUrl: fandom.image_url,
-            } : undefined,
-          },
-        } satisfies MasterCharacterProjection
-      })
-    if (rows.length) result.set(workId, rows)
+function migrationHint(message: string) {
+  const lower = message.toLowerCase()
+  if (lower.includes('get_master_data_snapshot') || lower.includes('personal_work_external_metadata') || lower.includes('pgrst202')) {
+    return ' Run supabase/data-integrity-master-v4.sql in the AnimeFinder Supabase SQL Editor.'
   }
-  return result
+  return ''
 }
 
 export async function loadMasterDataSnapshot(): Promise<MasterDataSnapshot> {
-  const works = listManagedCatalogWorks()
-  const workIds = works.map((work) => work.id)
-  const commentsPromise = listAnimeComments()
-  const summariesPromise = loadPersonalKnowledgeSummaries(workIds)
-  const synopsisPromise = loadSynopsisBatch(workIds)
-  const charactersPromise = loadCharacterKnowledgeBatch(workIds)
-  const [comments, summaries, synopsis, characterKnowledge] = await Promise.all([commentsPromise, summariesPromise, synopsisPromise, charactersPromise])
+  if (!isSupabaseConfigured || !supabase) throw new Error('Supabase is not configured. Master Data Table requires the database source of truth.')
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) throw new Error('Sign in before loading Master Data from Supabase.')
+
+  const { data, error } = await supabase.rpc('get_master_data_snapshot')
+  if (error) {
+    console.error('AnimeFinder Master Data RPC failed.', { operation: 'get_master_data_snapshot', code: error.code, message: error.message })
+    throw new Error(`Could not load the Supabase Master Data snapshot.${migrationHint(error.message)}`)
+  }
+
+  const payload = (data ?? {}) as any
+  const works = asArray<any>(payload.works).map(normalizeWork)
+  const categoryCounts = payload.categoryCounts && typeof payload.categoryCounts === 'object'
+    ? Object.fromEntries(Object.entries(payload.categoryCounts).map(([key, value]) => [key, Number(value) || 0]))
+    : {}
+
   return {
+    source: 'supabase',
+    generatedAt: String(payload.generatedAt ?? new Date().toISOString()),
+    totalWorks: Number(payload.totalWorks) || works.length,
+    categoryCounts,
     works,
-    comments: new Map(comments.map((row) => [row.malId, row])),
-    summaries: summaries.size ? summaries : getCachedPersonalKnowledgeSummaries(workIds),
-    synopsis,
-    characterKnowledge,
   }
 }
 
+export function auditCatalogIntegrity(snapshot: MasterDataSnapshot): CatalogIntegrityAudit {
+  const frontend = listManagedCatalogWorks()
+  const databaseIds = new Set(snapshot.works.map((work) => work.id))
+  const frontendIds = new Set(frontend.map((work) => work.id))
+  return {
+    databaseCount: snapshot.works.length,
+    frontendReferenceCount: frontend.length,
+    missingInDatabase: frontend.filter((work) => !databaseIds.has(work.id)).map((work) => work.id),
+    extraInDatabase: snapshot.works.filter((work) => !frontendIds.has(work.id)).map((work) => work.id),
+  }
+}
+
+export async function syncMissingCatalogWorksToSupabase(snapshot: MasterDataSnapshot) {
+  if (!supabase) throw new Error('Supabase is not configured.')
+  const databaseIds = new Set(snapshot.works.map((work) => work.id))
+  const missing = listManagedCatalogWorks().filter((work) => !databaseIds.has(work.id))
+  if (!missing.length) return 0
+
+  const payload = missing.map((work) => ({
+    id: work.id,
+    display_name: work.displayName,
+    primary_mal_id: work.primaryMalId,
+    category: work.category,
+    watch_status: work.watchStatus,
+    my_ranked: work.myRanked,
+    original_observations: work.originalObservations,
+    comments: work.comments,
+    poster_url: work.posterUrl ?? null,
+    mal_score: work.malScore,
+    english_name: work.englishName,
+    original_name: work.originalName,
+    mal_url: work.malUrl,
+    association_mal_ids: work.associationMalIds,
+  }))
+
+  const { data, error } = await supabase.rpc('insert_missing_personal_catalog_works', { p_works: payload })
+  if (error) {
+    console.error('AnimeFinder catalog bootstrap failed.', { operation: 'insert_missing_personal_catalog_works', code: error.code, message: error.message })
+    throw new Error(`Could not import missing Personal Works into Supabase.${migrationHint(error.message)}`)
+  }
+  return Number(data) || 0
+}
+
+async function persistGenres(work: MasterDataWork, genres: string[]) {
+  if (!supabase) throw new Error('Supabase is not configured.')
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  const userId = userData.user?.id
+  if (userError || !userId) throw new Error('Authentication required.')
+
+  const timestamp = new Date().toISOString()
+  const { error } = await supabase.from('personal_work_external_metadata').upsert({
+    user_id: userId,
+    personal_work_id: work.id,
+    mal_id: work.primaryMalId,
+    genres,
+    metadata_provider: 'jikan-compatible',
+    metadata_fetched_at: timestamp,
+    updated_at: timestamp,
+  }, { onConflict: 'user_id,personal_work_id' })
+  if (error) throw new Error(error.message)
+
+  const { data: readBack, error: readError } = await supabase.from('personal_work_external_metadata')
+    .select('genres,metadata_provider,metadata_fetched_at')
+    .eq('user_id', userId)
+    .eq('personal_work_id', work.id)
+    .maybeSingle()
+  if (readError || !readBack) throw new Error(readError?.message ?? 'Genre metadata read-back failed.')
+  const persisted = asArray<string>(readBack.genres).map(String)
+  if (persisted.join('\u0000') !== genres.join('\u0000')) throw new Error('Genre metadata read-back did not match the written value.')
+}
+
+export async function backfillPersistedGenres(
+  snapshot: MasterDataSnapshot,
+  onProgress?: (progress: MetadataBackfillProgress) => void,
+  signal?: AbortSignal,
+): Promise<MetadataBackfillProgress> {
+  const candidates = snapshot.works.filter((work) => work.primaryMalId != null)
+  const alreadyPersisted = candidates.filter((work) => work.genres.length > 0).length
+  const pending = candidates.filter((work) => work.genres.length === 0)
+  const progress: MetadataBackfillProgress = {
+    total: candidates.length,
+    alreadyPersisted,
+    processed: 0,
+    succeeded: 0,
+    missingSource: 0,
+    failed: 0,
+  }
+
+  for (const work of pending) {
+    if (signal?.aborted) break
+    progress.currentWork = work.displayName
+    onProgress?.({ ...progress })
+    try {
+      const anime = await animeProvider.getAnime(work.primaryMalId!)
+      const genres = anime.genres.map((genre) => genre.name).filter(Boolean)
+      if (!genres.length) progress.missingSource += 1
+      else {
+        await persistGenres(work, genres)
+        progress.succeeded += 1
+      }
+    } catch (error) {
+      progress.failed += 1
+      console.error('AnimeFinder genre backfill failed.', {
+        operation: 'metadata_backfill',
+        entity: work.id,
+        provider: 'jikan-compatible',
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    progress.processed += 1
+    onProgress?.({ ...progress })
+    await new Promise((resolve) => window.setTimeout(resolve, 650))
+  }
+
+  progress.currentWork = undefined
+  onProgress?.({ ...progress })
+  return progress
+}
+
 export function characterKnowledgeJson(snapshot: MasterDataSnapshot, workId: string) {
-  return snapshot.characterKnowledge.get(workId) ?? []
+  return snapshot.works.find((work) => work.id === workId)?.characterKnowledge ?? []
+}
+
+export function masterWorkByMalId(snapshot: MasterDataSnapshot, malId: number) {
+  return snapshot.works.find((work) => work.primaryMalId === malId || work.associationMalIds.includes(malId)) ?? null
 }
