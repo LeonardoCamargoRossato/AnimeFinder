@@ -1,5 +1,5 @@
 -- AnimeFinder — Character Knowledge V1
--- Jikan/MAL external character cache + personal work character linking.
+-- Jikan/MAL external character cache + personal work character linking + anime roster cache.
 -- Run after the existing AnimeFinder Personal Knowledge migrations.
 
 create table if not exists animefinder.external_characters (
@@ -12,6 +12,12 @@ create table if not exists animefinder.external_characters (
   last_synced_at timestamptz not null default now(),
   primary key (provider, provider_character_id),
   constraint external_characters_provider_check check (provider in ('jikan'))
+);
+
+create table if not exists animefinder.anime_character_roster_cache (
+  anime_mal_id bigint primary key,
+  characters_json jsonb not null default '[]'::jsonb,
+  last_synced_at timestamptz not null default now()
 );
 
 create table if not exists animefinder.personal_character_external_links (
@@ -41,8 +47,11 @@ create index if not exists personal_character_external_links_external_idx
   on animefinder.personal_character_external_links(provider, provider_character_id);
 create index if not exists external_characters_synced_idx
   on animefinder.external_characters(last_synced_at desc);
+create index if not exists anime_character_roster_cache_synced_idx
+  on animefinder.anime_character_roster_cache(last_synced_at desc);
 
 alter table animefinder.external_characters enable row level security;
+alter table animefinder.anime_character_roster_cache enable row level security;
 alter table animefinder.personal_character_external_links enable row level security;
 
 drop policy if exists "AnimeFinder can read external characters" on animefinder.external_characters;
@@ -58,6 +67,22 @@ with check (animefinder.is_authorized_user());
 drop policy if exists "AnimeFinder can update external characters" on animefinder.external_characters;
 create policy "AnimeFinder can update external characters"
 on animefinder.external_characters for update to authenticated
+using (animefinder.is_authorized_user())
+with check (animefinder.is_authorized_user());
+
+drop policy if exists "AnimeFinder can read character roster cache" on animefinder.anime_character_roster_cache;
+create policy "AnimeFinder can read character roster cache"
+on animefinder.anime_character_roster_cache for select to authenticated
+using (animefinder.is_authorized_user());
+
+drop policy if exists "AnimeFinder can insert character roster cache" on animefinder.anime_character_roster_cache;
+create policy "AnimeFinder can insert character roster cache"
+on animefinder.anime_character_roster_cache for insert to authenticated
+with check (animefinder.is_authorized_user());
+
+drop policy if exists "AnimeFinder can update character roster cache" on animefinder.anime_character_roster_cache;
+create policy "AnimeFinder can update character roster cache"
+on animefinder.anime_character_roster_cache for update to authenticated
 using (animefinder.is_authorized_user())
 with check (animefinder.is_authorized_user());
 
@@ -83,6 +108,7 @@ on animefinder.personal_character_external_links for delete to authenticated
 using (animefinder.is_authorized_user() and auth.uid() = user_id);
 
 grant select, insert, update on animefinder.external_characters to authenticated;
+grant select, insert, update on animefinder.anime_character_roster_cache to authenticated;
 grant select, insert, update, delete on animefinder.personal_character_external_links to authenticated;
 
 create or replace function animefinder.touch_character_link_updated_at()
