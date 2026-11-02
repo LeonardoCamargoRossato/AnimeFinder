@@ -1,5 +1,6 @@
 -- AnimeFinder — Hamlet AI V1.2
--- Persistent conversations, messages, recommendation references and access metadata.
+-- Manual SQL Editor deployment script for persistent conversations.
+-- Safe/idempotent: creates only the Hamlet V1.2 objects when missing.
 
 create extension if not exists pgcrypto;
 create schema if not exists animefinder;
@@ -106,3 +107,9 @@ $$;
 grant execute on function animefinder.touch_hamlet_conversation(uuid) to authenticated;
 
 notify pgrst, 'reload schema';
+
+-- Post-deployment verification. The three values below must all be true.
+select
+  to_regclass('animefinder.hamlet_conversations') is not null as hamlet_conversations_ready,
+  to_regclass('animefinder.hamlet_messages') is not null as hamlet_messages_ready,
+  to_regclass('animefinder.hamlet_recommendations') is not null as hamlet_recommendations_ready;
