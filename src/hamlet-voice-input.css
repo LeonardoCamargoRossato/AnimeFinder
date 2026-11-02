@@ -13,61 +13,87 @@
 
 .hamlet-voice-control {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   position: relative;
 }
 
+/* Native AnimeFinder microphone: simple 2D silhouette, WhatsApp-like and easy to scan. */
 .hamlet-voice-button {
   width: 48px;
   min-width: 48px;
+  height: 48px;
   min-height: 48px;
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
-  color: var(--text);
+  border: 2px solid color-mix(in srgb, var(--accent) 78%, #fff 22%);
+  border-radius: 999px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 86%, #a878ff 14%), var(--accent));
+  color: #fff;
   font: inherit;
-  font-size: 19px;
   line-height: 1;
   cursor: pointer;
-  transition: border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease, filter .16s ease;
+}
+
+/* Hide the old emoji/square/dots glyphs and render one consistent microphone silhouette. */
+.hamlet-voice-button > span {
+  position: relative;
+  display: block;
+  width: 25px;
+  height: 25px;
+  font-size: 0;
+  color: inherit;
+}
+
+.hamlet-voice-button > span::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm7-3h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21H8v2h8v-2h-3v-3.08A7 7 0 0 0 19 11Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm7-3h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21H8v2h8v-2h-3v-3.08A7 7 0 0 0 19 11Z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .hamlet-voice-button:hover,
 .hamlet-voice-button:focus-visible {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: translateY(-1px) scale(1.04);
+  filter: brightness(1.08);
+  border-color: #d9b7ff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 8px 24px color-mix(in srgb, var(--accent) 42%, transparent);
   outline: none;
 }
 
+/* Keep the microphone recognizable while listening; state is conveyed by color/pulse, not a square glyph. */
 .hamlet-voice-control.is-listening .hamlet-voice-button {
-  border-color: #ff6b7a;
-  background: color-mix(in srgb, var(--surface) 76%, #ff5d70 24%);
-  color: #ff7b88;
-  box-shadow: 0 0 0 3px rgba(255,93,112,.13), 0 0 18px rgba(255,93,112,.35);
+  border-color: #ff9aa5;
+  background: linear-gradient(145deg, #ff6376, #d93f55);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(255,93,112,.15), 0 0 22px rgba(255,93,112,.52);
   animation: hamlet-voice-pulse 1.15s ease-in-out infinite;
 }
 
 .hamlet-voice-control.is-processing .hamlet-voice-button {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: #d9b7ff;
+  background: linear-gradient(145deg, #8f5cff, #6f36df);
+  color: #fff;
   cursor: progress;
-  animation: hamlet-voice-processing .9s linear infinite;
+  animation: hamlet-voice-processing .9s ease-in-out infinite;
 }
 
 .hamlet-voice-control.is-ready .hamlet-voice-button {
-  border-color: #58c98b;
-  background: color-mix(in srgb, var(--surface) 82%, #58c98b 18%);
-  color: #58c98b;
-  box-shadow: 0 0 0 3px rgba(88,201,139,.12);
+  border-color: #86e3ad;
+  background: linear-gradient(145deg, #58c98b, #329b68);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(88,201,139,.14), 0 6px 18px rgba(50,155,104,.28);
 }
 
 .hamlet-voice-control.is-error .hamlet-voice-button,
 .hamlet-voice-control.is-unsupported .hamlet-voice-button {
-  border-color: color-mix(in srgb, #f0a83b 62%, var(--border));
+  border-color: #ffd18a;
+  background: linear-gradient(145deg, #d99631, #a86b15);
+  color: #fff;
 }
 
 .hamlet-voice-feedback {
@@ -95,13 +121,12 @@
 
 @keyframes hamlet-voice-pulse {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.045); }
+  50% { transform: scale(1.07); }
 }
 
 @keyframes hamlet-voice-processing {
-  0% { box-shadow: inset 0 0 0 0 color-mix(in srgb, var(--accent) 24%, transparent); }
-  50% { box-shadow: inset 0 0 0 24px color-mix(in srgb, var(--accent) 10%, transparent); }
-  100% { box-shadow: inset 0 0 0 0 color-mix(in srgb, var(--accent) 24%, transparent); }
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 28%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 8%, transparent), 0 0 24px color-mix(in srgb, var(--accent) 48%, transparent); }
 }
 
 @media (max-width: 560px) {
@@ -112,8 +137,13 @@
   .hamlet-voice-button {
     width: 46px;
     min-width: 46px;
+    height: 46px;
     min-height: 46px;
-    font-size: 18px;
+  }
+
+  .hamlet-voice-button > span {
+    width: 24px;
+    height: 24px;
   }
 
   .hamlet-voice-feedback {
