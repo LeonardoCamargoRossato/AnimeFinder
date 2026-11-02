@@ -14,6 +14,18 @@ export interface HamletSearchMeta {
   pagesLoaded: number
   catalogPages: number
   truncated: boolean
+  hasMore: boolean
+  nextPage: number | null
+}
+
+type HamletSearchSession = {
+  key: string
+  baseIntent: HamletSearchIntent
+  nextPage: number
+  catalogTotal: number
+  catalogPages: number
+  pagesLoaded: number
+  items: Map<number, Anime>
 }
 
 let lastSearchMeta: HamletSearchMeta = {
@@ -23,10 +35,30 @@ let lastSearchMeta: HamletSearchMeta = {
   pagesLoaded: 0,
   catalogPages: 0,
   truncated: false,
+  hasMore: false,
+  nextPage: null,
 }
+
+let activeSession: HamletSearchSession | null = null
+let continuationRequested = false
 
 export function getLastHamletSearchMeta() {
   return { ...lastSearchMeta }
+}
+
+export function requestHamletSearchContinuation() {
+  continuationRequested = true
+}
+
+function searchIntentKey(intent: HamletSearchIntent) {
+  return JSON.stringify({
+    genres: [...intent.genres].map(normalize).sort(),
+    themes: [...intent.themes].map(normalize).sort(),
+    concepts: [...intent.concepts].map(normalize).sort(),
+    avoidGenres: [...intent.avoidGenres].map(normalize).sort(),
+    avoidConcepts: [...intent.avoidConcepts].map(normalize).sort(),
+    excludeWatched: intent.excludeWatched,
+  })
 }
 
 function phraseInText(phrase: string, text: string) {
@@ -47,26 +79,16 @@ function buildWhy(anime: Anime, desiredGenres: string[], concepts: string[]) {
   return { text: anime.score != null ? `A high-scoring catalog result compatible with the current broad criteria (MAL score ${anime.score.toFixed(1)}).` : 'A catalog result compatible with the current broad criteria.', matched }
 }
 
-async function fetchCandidateBatch(genres: string[]) {
+async function fetchCandidatePage(genres: string[], page: number) {
   const filters = genres.length ? { genres } : {}
-  const first = await animeProvider.browseAnime({ page: 1, limit: PAGE_SIZE, filters })
-  const catalogTotal = first.total ?? first.items.length
-  const catalogPages = first.lastPage ?? Math.max(1, Math.ceil(catalogTotal / PAGE_SIZE))
-  const pagesToLoad = Math.max(1, catalogPages)
-  const items: Anime[] = [...first.items]
-
-  for (let start = 2; start <= pagesToLoad; start += 4) {
-    const pageNumbers = Array.from({ length: Math.min(4, pagesToLoad - start + 1) }, (_, index) => start + index)
-    const rows = await Promise.all(pageNumbers.map((page) => animeProvider.browseAnime({ page, limit: PAGE_SIZE, filters })))
-    for (const row of rows) items.push(...row.items)
-  }
-
+  const result = await animeProvider.browseAnime({ page, limit: PAGE_SIZE, filters })
+  const catalogTotal = result.total ?? result.items.length
+  const catalogPages = result.lastPage ?? Math.max(1, Math.ceil(catalogTotal / PAGE_SIZE))
   return {
-    items,
+    items: result.items,
     catalogTotal,
     catalogPages,
-    pagesLoaded: pagesToLoad,
-    truncated: false,
+    hasNextPage: result.hasNextPage,
   }
 }
 
@@ -75,45 +97,47 @@ export async function searchHamletAnime(intent: HamletSearchIntent): Promise<Ham
   const canonicalByName = new Map(availableGenres.map((genre) => [normalize(genre.name), genre.name]))
   const canonicalize = (value: string) => canonicalByName.get(normalize(value))
   const desiredGenres = unique([...intent.genres, ...intent.themes].map(canonicalize).filter((value): value is string => Boolean(value)))
-  const avoidedGenres = new Set(intent.avoidGenres.map((value) => normalize(canonicalize(value) ?? value)))
-  const watchedIds = new Set(watchedRows.map((row) => row.mal_id).filter((id): id is number => id != null))
+  const key = searchIntentKey(intent)
+  const continueExisting = continuationRequested && activeSession?.key === key
+  continuationRequested = false
 
-  let batch = { items: [] as Anime[], catalogTotal: 0, catalogPages: 0, pagesLoaded: 0, truncated: false }
-  try {
-    batch = await fetchCandidateBatch(desiredGenres)
-    if (batch.items.length < 8 && desiredGenres.length > 1) {
-      const broad = await fetchCandidateBatch(desiredGenres.slice(0, 1))
-      batch.items.push(...broad.items)
-      batch.catalogTotal = Math.max(batch.catalogTotal, broad.catalogTotal)
-      batch.catalogPages = Math.max(batch.catalogPages, broad.catalogPages)
-      batch.pagesLoaded = Math.max(batch.pagesLoaded, broad.pagesLoaded)
+  if (!activeSession || activeSession.key !== key || !continueExisting) {
+    activeSession = {
+      key,
+      baseIntent: intent,
+      nextPage: 1,
+      catalogTotal: 0,
+      catalogPages: 0,
+      pagesLoaded: 0,
+      items: new Map<number, Anime>(),
     }
-    if (batch.items.length < 8) {
-      const broad = await fetchCandidateBatch([])
-      batch.items.push(...broad.items)
-      batch.catalogTotal = Math.max(batch.catalogTotal, broad.catalogTotal)
-      batch.catalogPages = Math.max(batch.catalogPages, broad.catalogPages)
-      batch.pagesLoaded = Math.max(batch.pagesLoaded, broad.pagesLoaded)
-    }
-  } catch (error) {
-    if (!batch.items.length) throw error
   }
 
-  const byId = new Map<number, Anime>()
-  batch.items.forEach((anime) => byId.set(anime.malId, anime))
-  const queryTerms = normalize(intent.query).split(/[^\p{L}\p{N}]+/u).filter((word) => word.length > 3)
+  const session = activeSession
+  const pageToLoad = Math.max(1, session.nextPage)
+  const page = await fetchCandidatePage(desiredGenres, pageToLoad)
+  page.items.forEach((anime) => session.items.set(anime.malId, anime))
+  session.catalogTotal = page.catalogTotal
+  session.catalogPages = page.catalogPages
+  session.pagesLoaded = Math.max(session.pagesLoaded, pageToLoad)
+  session.nextPage = page.hasNextPage && pageToLoad < page.catalogPages ? pageToLoad + 1 : page.catalogPages + 1
 
-  const ranked = Array.from(byId.values()).map((anime) => {
+  const rankingIntent = session.baseIntent
+  const avoidedGenres = new Set(rankingIntent.avoidGenres.map((value) => normalize(canonicalize(value) ?? value)))
+  const watchedIds = new Set(watchedRows.map((row) => row.mal_id).filter((id): id is number => id != null))
+  const queryTerms = normalize(rankingIntent.query).split(/[^\p{L}\p{N}]+/u).filter((word) => word.length > 3)
+
+  const ranked = Array.from(session.items.values()).map((anime) => {
     const genreNames = anime.genres.map((genre) => normalize(genre.name))
     if (genreNames.some((name) => avoidedGenres.has(name))) return null
-    if (intent.excludeWatched && watchedIds.has(anime.malId)) return null
+    if (rankingIntent.excludeWatched && watchedIds.has(anime.malId)) return null
     const haystack = normalize([anime.title, anime.titleEnglish, anime.titleJapanese, anime.synopsis, ...anime.genres.map((genre) => genre.name)].filter(Boolean).join(' '))
-    if (intent.avoidConcepts.some((concept) => phraseInText(concept, haystack))) return null
+    if (rankingIntent.avoidConcepts.some((concept) => phraseInText(concept, haystack))) return null
     const genreScore = desiredGenres.reduce((score, genre) => score + (genreNames.includes(normalize(genre)) ? 8 : 0), 0)
-    const conceptScore = intent.concepts.reduce((score, concept) => score + (phraseInText(concept, haystack) ? 4 : 0), 0)
+    const conceptScore = rankingIntent.concepts.reduce((score, concept) => score + (phraseInText(concept, haystack) ? 4 : 0), 0)
     const queryScore = queryTerms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0)
     const score = genreScore + conceptScore + queryScore + Math.max(0, anime.score ?? 0) * 0.25
-    const why = buildWhy(anime, desiredGenres, intent.concepts)
+    const why = buildWhy(anime, desiredGenres, rankingIntent.concepts)
     return { anime, score, why }
   }).filter((row): row is { anime: Anime; score: number; why: { text: string; matched: string[] } } => Boolean(row))
     .sort((a, b) => b.score - a.score)
@@ -125,13 +149,16 @@ export async function searchHamletAnime(intent: HamletSearchIntent): Promise<Ham
     watched: watchedIds.has(anime.malId),
   }))
 
+  const hasMore = session.nextPage <= session.catalogPages
   lastSearchMeta = {
-    catalogTotal: batch.catalogTotal,
-    loadedCandidates: byId.size,
+    catalogTotal: session.catalogTotal,
+    loadedCandidates: session.items.size,
     filteredRecommendations: recommendations.length,
-    pagesLoaded: batch.pagesLoaded,
-    catalogPages: batch.catalogPages,
-    truncated: false,
+    pagesLoaded: session.pagesLoaded,
+    catalogPages: session.catalogPages,
+    truncated: hasMore,
+    hasMore,
+    nextPage: hasMore ? session.nextPage : null,
   }
 
   return recommendations
