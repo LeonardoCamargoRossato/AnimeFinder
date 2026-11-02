@@ -54,34 +54,28 @@ export default function AIEnrichmentEnhancer() {
       button.style.alignItems = 'center'
       button.style.gap = '8px'
       button.style.minHeight = '40px'
-      button.style.padding = '7px 13px 7px 8px'
+      button.style.padding = '7px 13px 7px 10px'
       button.style.border = '1px solid color-mix(in srgb, var(--accent) 82%, #fff 18%)'
       button.style.background = 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), color-mix(in srgb, var(--accent) 10%, var(--background)))'
       button.style.color = 'color-mix(in srgb, var(--accent) 82%, #fff 18%)'
       button.style.boxShadow = '0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 30%, transparent)'
 
-      const face = document.createElement('span')
-      face.setAttribute('aria-hidden', 'true')
-      face.textContent = '◕‿◕'
-      face.style.display = 'grid'
-      face.style.placeItems = 'center'
-      face.style.width = '26px'
-      face.style.height = '26px'
-      face.style.flex = '0 0 26px'
-      face.style.borderRadius = '999px'
-      face.style.background = 'radial-gradient(circle at 35% 30%, #d9c7ff 0%, var(--accent) 46%, #4b1aa8 100%)'
-      face.style.color = '#fff'
-      face.style.fontSize = '10px'
-      face.style.fontWeight = '900'
-      face.style.letterSpacing = '-1px'
-      face.style.boxShadow = '0 0 0 1px color-mix(in srgb, #fff 58%, var(--accent)), 0 0 12px color-mix(in srgb, var(--accent) 72%, transparent)'
+      const sparkle = document.createElement('span')
+      sparkle.setAttribute('aria-hidden', 'true')
+      sparkle.textContent = '✨'
+      sparkle.style.display = 'inline-grid'
+      sparkle.style.placeItems = 'center'
+      sparkle.style.flex = '0 0 auto'
+      sparkle.style.fontSize = '16px'
+      sparkle.style.lineHeight = '1'
+      sparkle.style.filter = 'drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 72%, transparent))'
 
       const label = document.createElement('span')
       label.textContent = 'Enrich with Hamlet AI'
       label.style.fontWeight = '800'
       label.style.whiteSpace = 'nowrap'
 
-      button.replaceChildren(face, label)
+      button.replaceChildren(sparkle, label)
 
       const enterHandler = () => {
         button.style.transform = 'translateY(-1px)'
