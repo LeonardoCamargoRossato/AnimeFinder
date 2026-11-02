@@ -1,0 +1,40 @@
+ANIMEFINDER — SUPABASE SINGLE SOURCE OF TRUTH V1
+REMOVE LOCALSTORAGE PERSISTENCE + MASTER DATA FIX + METADATA PERSISTENCE + FANDOM FIX + SYNOPSIS/GENRES + MASTER TABLE UX + AUDIO SYNC
+
+ARCHITECTURAL RULE
+Supabase is the database and single source of truth for persistent AnimeFinder data. Jikan/MAL and Fandom are enrichment providers. The browser is a client. localStorage/IndexedDB must not be a database. The Master Data Table is a human-readable projection of Supabase.
+
+IMPLEMENTATION REQUIREMENTS
+1. Audit browser persistence. Classify every localStorage/sessionStorage/IndexedDB use as persistent app data, temporary UI, cache, auth session, or legacy migration data.
+2. Migrate historical browser/hardcoded Personal Catalog data to Supabase before retiring legacy persistence. Never overwrite newer/confirmed Supabase personal data.
+3. Personal Catalog runtime, category counts, ranking, observations, comments, keywords, characters, character ranking/comments/keywords, genres, synopsis, translated synopsis, Jikan/Fandom links and external metadata must survive clearing browser storage.
+4. Temporary React state and unsaved drafts may remain memory-only. Supabase Auth storage and harmless visual/TTS preferences may remain browser-managed.
+5. Normal Personal Catalog and Master Data Table must consume the same Supabase source. Hardcoded catalog files are legacy bootstrap data only.
+6. External anime metadata follows: Supabase check → if missing provider fetch → validate → persist Supabase → read-back → render. Do not query providers again on every page load.
+7. Genres and synopsis backfills query only missing rows, make controlled provider requests, persist, read-back verify and expose real progress.
+8. Master Data Table opens by automatically querying get_master_data_snapshot(). Add a small ↻ Refresh from Supabase action that only re-queries Supabase. Remove migration/debug count banners from normal UI.
+9. Master Data rows have identical fixed height. Clamp long text, allow click-to-view, and use a subtle alternating dark/purple row tint. Preserve current visual design.
+10. Fandom-only characters are valid. Character Profile reads personal_character_external_sources and must show persisted Fandom canonical name/image/about/source/URL without requiring Jikan. Confirm Fandom Match = WRITE → READ-BACK → verify → render → success. Never show false success.
+11. Jikan and Fandom share one external_sources concept for a Personal Character.
+12. SpeechSynthesis progress must be synchronized as honestly as the browser allows: anchor to real boundary callbacks, interpolate only between observed boundaries, snap/correct on each boundary, stop on pause, continue on resume, and keep ±10s/rate changes consistent. Label time as approximate.
+13. CSV/JSON/PDF/Print export the consolidated Supabase dataset, not only visible DOM rows. PDF remains A4 landscape with AnimeFinder purple identity, page numbers and Leonardo Camargo Rossato / LCR Solutions Architecture footer.
+14. Acceptance test: clear AnimeFinder legacy localStorage, reload/login, and Personal Catalog + World Trigger comment/keywords/characters + Sōya Kazama Fandom link + genres + synopsis + Master Data must reconstruct from Supabase.
+
+IMPLEMENTATION ORDER
+- Apply data-integrity-master-v4.sql first.
+- Apply supabase-single-source-v1.sql.
+- Run verified legacy browser migration on authenticated startup.
+- Hydrate Personal Catalog from Supabase before app render.
+- Replace persistent browser fallbacks with Supabase + in-memory session cache.
+- Fix Master Table refresh/row UX.
+- Fix Fandom-only Character Profile semantics.
+- Fix SpeechSynthesis progress.
+- Run TypeScript/Vite build and GitHub Pages deploy.
+
+DO NOT
+- replace localStorage with IndexedDB;
+- silently fall back to browser persistence after Supabase failure;
+- use hardcoded catalog counts as runtime truth;
+- make 141×N per-row Master Data queries;
+- show Fandom/Jikan save success before Supabase read-back;
+- call Jikan/Fandom/translation merely because Master Data Refresh was clicked.
