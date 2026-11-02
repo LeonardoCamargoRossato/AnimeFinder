@@ -10,7 +10,10 @@
 .hamlet-context-workspace-host{margin:0 0 24px}
 
 .hamlet-self-knowledge-workspace .hamlet-header{align-items:flex-start}
-.hamlet-self-engine-status{min-width:250px;display:grid;gap:4px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--surface) 94%,var(--accent) 6%)}
+.hamlet-self-header-side{display:grid;gap:8px;min-width:250px}
+.hamlet-self-conversation-actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.hamlet-self-conversation-actions button{font-size:10px;padding:7px 9px;opacity:.62;cursor:not-allowed}
+.hamlet-self-engine-status{display:grid;gap:4px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--surface) 94%,var(--accent) 6%)}
 .hamlet-self-engine-status strong{font-size:13px;color:var(--text)}
 .hamlet-self-engine-status small{font-size:10px;color:var(--muted);line-height:1.35}
 .hamlet-self-conversation-only{display:block}
@@ -25,6 +28,7 @@
 .discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hero>.search-bar,
 .discover-page.hamlet-mode-active.hamlet-self-knowledge-active>.filters-panel,
 .discover-page.hamlet-mode-active.hamlet-self-knowledge-active>.results-section{display:none!important}
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hamlet-mode-tabs button:first-child{display:none}
 .discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hero{margin-bottom:4px}
 .discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hamlet-workspace-host{margin-top:4px}
 
@@ -34,6 +38,7 @@
   .hamlet-context-launcher-host{justify-content:stretch}
   .hamlet-context-launcher{width:100%;justify-content:center;min-height:44px}
   .hamlet-self-knowledge-workspace .hamlet-header{display:grid;gap:12px}
-  .hamlet-self-engine-status{min-width:0;width:auto}
+  .hamlet-self-header-side{min-width:0;width:auto}
+  .hamlet-self-conversation-actions{justify-content:flex-start}
   .hamlet-self-messages{min-height:48vh;max-height:58vh}
 }
