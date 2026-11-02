@@ -1,4 +1,4 @@
-# Hamlet AI — Supabase Edge Function V1.1
+# Hamlet AI — Supabase Edge Function V1.2
 
 `hamlet-ai` is the secure server bridge between AnimeFinder and the Gemini Developer API.
 
@@ -6,77 +6,88 @@
 
 - `GEMINI_API_KEY` exists only as a Supabase Edge Function secret.
 - The React/GitHub Pages bundle never receives the key.
-- The function validates the authenticated Supabase user and currently authorizes only the private AnimeFinder account.
+- The function validates the authenticated Supabase user and authorizes only the private AnimeFinder account.
 - Do not add `VITE_GEMINI_API_KEY` or any Gemini key to GitHub Actions, frontend env files, localStorage, or database tables.
 
-## Reliability model chain
+## V1.1 reliability preserved
 
-Default model:
+Default model: `gemini-3.5-flash-lite`.
 
-```text
-gemini-3.5-flash-lite
-```
-
-Default fallback order:
+Fallback order:
 
 1. `gemini-3.5-flash-lite`
 2. `gemini-3.1-flash-lite`
 3. `gemini-3.6-flash`
 4. `gemini-3.8-flash`
 
-The frontend may submit one of these supported model ids as `preferredModel`. That model is tried first; the remaining supported models remain enabled as fallback.
+The frontend may submit a supported model as `preferredModel`. It is tried first; all other supported Gemini models remain fallback candidates.
 
-Fallback is used for transient conditions such as 408/429/500/502/503/504, provider timeout/network failure and model-specific temporary unavailability. Non-transient auth/config/request errors do not blindly run the entire chain.
+Fallback is reserved for transient conditions such as 408/429/500/502/503/504, provider timeout/network failure and temporary model unavailability. Each attempt is capped at about 10 seconds and the overall model-attempt budget is about 38 seconds.
 
-Each model attempt is limited to about 10 seconds and the total model-attempt budget is limited to about 38 seconds.
+Server logs include model/status/duration only. Never log keys, tokens or full personal conversation content.
 
-## API
+## V1.2 structured output
 
-- API style: official Gemini Interactions REST API.
-- Structured JSON output is enforced with `response_format` and validated again in the AnimeFinder client.
-- Streaming is not enabled.
-- Conversation history remains ephemeral React memory; no Hamlet conversation tables are created.
+The Edge Function now returns:
 
-The direct REST call is intentional in V1.1: it lets the Edge Function apply `AbortController` directly to each HTTP attempt for reliable timeout/fallback behavior.
+- Hamlet reply
+- complete structured anime-search intent
+- `conversationMetadata`
+- actual successful Gemini model
+- preferred model
+- whether fallback was used
 
-## Observability
+`conversationMetadata` contains a concise AI-generated title/description only when enough context exists or when the search meaning materially changed. This metadata is generated in the **same Gemini request**; V1.2 does not make an extra metadata-only AI request.
 
-Server logs include concise records such as:
+If `titleSource=user`, Hamlet returns no replacement metadata. The frontend also prevents AI metadata from overwriting user-edited metadata.
 
-```text
-Hamlet model attempt: { model, status, durationMs }
-Hamlet fallback: { model }
-Hamlet success: { model, durationMs }
-```
+## Persistent conversation data
 
-Do not log keys, authorization headers/tokens, or full conversation content.
+Conversation persistence is handled directly by the authenticated React/Supabase client, not by the Gemini Edge Function. Apply the migration:
 
-## Required manual setup
+`supabase/migrations/20261102162500_hamlet_ai_v1_2.sql`
 
-If the Gemini key is already configured, V1.1 requires no new secret:
+It creates:
+
+- `animefinder.hamlet_conversations`
+- `animefinder.hamlet_messages`
+- `animefinder.hamlet_recommendations`
+- indexes
+- RLS policies
+- `animefinder.touch_hamlet_conversation(uuid)`
+
+No service-role key is required in the browser.
+
+## Deployment
+
+From a terminal linked to the AnimeFinder Supabase project:
 
 ```bash
+supabase db push
 supabase functions deploy hamlet-ai
 ```
 
-For a fresh environment:
+For a fresh environment only:
 
 ```bash
 supabase secrets set GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+supabase db push
 supabase functions deploy hamlet-ai
 ```
 
-`HAMLET_GEMINI_MODEL` is no longer required. If it still exists from V1, V1.1 ignores it.
+No new Gemini secret is required when `GEMINI_API_KEY` already exists. `HAMLET_GEMINI_MODEL` remains unnecessary and ignored.
 
 ## Acceptance test
 
-After deployment, open AnimeFinder → Discover → Hamlet AI.
-
-1. Confirm the visible model defaults to `Gemini 3.5 Flash-Lite`.
-2. Open the model selector: Gemini is available; GPT and Claude are disabled.
-3. Open Gemini and select any supported model as preferred.
-4. Send `Quero assistir um anime sobre RPG.`
-5. Hamlet should clarify the RPG intent or produce structured criteria.
-6. If the preferred model fails transiently but a backup succeeds, the conversation continues without a technical error and the model indicator changes to the actual backup model.
-7. If all Gemini models fail, Hamlet must stop loading and show `Hamlet is temporarily unavailable. Please try again.`
-8. Traditional Search remains operational.
+1. Apply the migration and redeploy `hamlet-ai`.
+2. Open AnimeFinder → Discover → Hamlet AI.
+3. Confirm the model defaults to Gemini 3.5 Flash-Lite and the selector still exposes the V1.1 fallback models.
+4. Start a real conversation; confirm it appears automatically in Conversation History.
+5. Navigate to Anime Details and back; confirm the active conversation restores.
+6. Refresh the browser; confirm the active conversation restores from Supabase.
+7. Continue until Hamlet generates a concise conversation title/description.
+8. Edit that metadata manually and confirm later messages do not overwrite it.
+9. Start New Conversation and confirm the previous one remains in history.
+10. Mark one recommendation as Needs classification and verify the Personal Catalog.
+11. Export all three Hamlet PDF modes.
+12. If a preferred Gemini model fails transiently and a backup succeeds, confirm the actual successful model still reaches the UI and is stored on the assistant message.
