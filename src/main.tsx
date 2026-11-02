@@ -27,6 +27,7 @@ import './personal-catalog-v2.css'
 import './ai-enrichment.css'
 import './ai-personal-knowledge.css'
 import './character-knowledge.css'
+import './character-linking-fix.css'
 import './analytics.css'
 
 async function bootstrap() {
