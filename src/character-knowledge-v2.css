@@ -1,0 +1,149 @@
+/* Character Knowledge V2 — full-width Personal Knowledge + Fandom fallback UI */
+.personal-knowledge-details-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.personal-knowledge-details-header h2 { margin: 4px 0 5px; }
+.personal-knowledge-details-header p { margin: 0; color: var(--muted); }
+.personal-knowledge-header-actions { flex: 0 0 auto; display: flex; gap: 8px; }
+
+.personal-knowledge-details-grid {
+  display: flex !important;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch !important;
+}
+.personal-knowledge-details-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.personal-knowledge-details-card.comment-card { min-height: auto !important; }
+.personal-knowledge-details-card.comment-card > small { margin-top: 8px !important; padding-top: 0 !important; }
+.personal-knowledge-comment-shell {
+  position: relative;
+  max-height: 9.2em;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.personal-knowledge-comment-shell::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3.2em;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+}
+.personal-knowledge-comment-shell.expanded { max-height: none; }
+.personal-knowledge-comment-shell.expanded::after { display: none; }
+.personal-knowledge-comment-shell p {
+  margin: 0;
+  max-height: none !important;
+  overflow: visible !important;
+  white-space: pre-wrap;
+  line-height: 1.65;
+  padding-right: 0 !important;
+}
+.personal-knowledge-comment-toggle { margin-top: 7px; color: var(--accent); font-weight: 800; }
+
+.personal-knowledge-ranked-list {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+.personal-knowledge-ranked-list b {
+  width: auto !important;
+  flex: 0 1 auto;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  white-space: nowrap;
+}
+
+.characters-card .personal-knowledge-character-list { display: none !important; }
+.character-knowledge-cards-host-container { width: 100%; margin-top: 8px; }
+.character-cards-toolbar { margin-bottom: 12px; }
+.favorite-character-cards {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+  gap: 10px;
+}
+.favorite-character-card {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 8px !important;
+  min-width: 0;
+  padding: 8px !important;
+}
+.favorite-character-image {
+  width: 100% !important;
+  height: 128px !important;
+  border-radius: 10px;
+}
+.favorite-character-card > div:last-child { gap: 3px !important; }
+.favorite-character-card > div:last-child > span { font-size: 11px; }
+.favorite-character-card strong { white-space: normal !important; line-height: 1.25; }
+.favorite-character-card small { white-space: normal !important; line-height: 1.25; }
+
+.character-provider-empty {
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 13px;
+  background: var(--background);
+}
+.character-provider-empty p { margin: 5px 0 10px; color: var(--muted); }
+.character-provider-empty > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.character-external-sources { background: color-mix(in srgb, var(--surface) 95%, var(--accent) 5%); }
+.character-external-source-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.fandom-button { border-color: color-mix(in srgb, var(--accent) 52%, var(--border)); }
+
+.fandom-search-panel {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 12px;
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.fandom-search-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.fandom-search-heading > button { border: 0; background: transparent; color: var(--text); font-size: 20px; cursor: pointer; }
+.fandom-search-results { display: grid; gap: 8px; margin-top: 8px; }
+.fandom-search-results article {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+}
+.fandom-search-results img,
+.fandom-search-results .character-avatar-placeholder { width: 56px; height: 68px; object-fit: cover; border-radius: 9px; }
+.fandom-search-results article > div { min-width: 0; display: grid; gap: 2px; }
+.fandom-search-results p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; max-height: 3.9em; overflow: hidden; }
+
+@media (min-width: 1200px) {
+  .favorite-character-cards { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)) !important; }
+}
+
+@media (max-width: 760px) {
+  .personal-knowledge-details-header { flex-direction: column; }
+  .personal-knowledge-header-actions { width: 100%; }
+  .personal-knowledge-header-actions button { width: 100%; }
+  .favorite-character-cards { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)) !important; }
+  .fandom-search-results article { grid-template-columns: 52px minmax(0, 1fr); }
+  .fandom-search-results article > button { grid-column: 1 / -1; width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .favorite-character-cards { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .favorite-character-image { height: 116px !important; }
+  .personal-knowledge-ranked-list b { white-space: normal; }
+}
