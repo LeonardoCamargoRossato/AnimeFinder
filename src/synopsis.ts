@@ -97,3 +97,52 @@ export async function backfillPersonalCatalogSynopsis(onProgress?:(progress:Syno
   for(const work of pending){if(signal?.aborted)break;progress.currentWork=work.displayName;onProgress?.({...progress});try{const result=await ensureSynopsisForWork(work,false);if(result.status==='complete'||result.status==='original_only')progress.succeeded+=1;else if(result.status==='missing_source')progress.missingSource+=1;else progress.failed+=1}catch(error){progress.failed+=1;console.error('AnimeFinder synopsis backfill item failed.',{entity:work.id,error:error instanceof Error?error.message:String(error)})}progress.processed+=1;onProgress?.({...progress});await new Promise((resolve)=>window.setTimeout(resolve,700))}
   progress.currentWork=undefined;onProgress?.({...progress});return progress
 }
+
+/** Translation-only backfill. It never calls Jikan/AniList: it translates only synopsis_original already persisted in Supabase. */
+export async function backfillSynopsisTranslationsPtBr(onProgress?:(progress:SynopsisBackfillProgress)=>void,signal?:AbortSignal):Promise<SynopsisBackfillProgress>{
+  const snapshot=await loadMasterDataSnapshot(), works=snapshot.works
+  const pending=works.filter((work)=>Boolean(work.synopsis.original) && !work.synopsis.ptBR)
+  const progress:SynopsisBackfillProgress={
+    total:pending.length,
+    alreadyCached:works.filter((work)=>Boolean(work.synopsis.ptBR)).length,
+    processed:0,
+    succeeded:0,
+    missingSource:works.filter((work)=>!work.synopsis.original).length,
+    failed:0,
+  }
+  onProgress?.({...progress})
+  for(const work of pending){
+    if(signal?.aborted)break
+    progress.currentWork=work.displayName;onProgress?.({...progress})
+    try{
+      const existing=await loadRemote(work.id)
+      const original=existing?.original ?? work.synopsis.original
+      if(!original){progress.missingSource+=1}
+      else{
+        const portuguese=await translationService.translate(original,existing?.sourceLanguage || 'en','pt-BR')
+        const translatedAt=new Date().toISOString()
+        const verified=await persist({
+          personalWorkId:work.id,
+          malId:existing?.malId ?? work.primaryMalId,
+          original,
+          portuguese,
+          source:existing?.source ?? (work.synopsis.provider==='AniList fallback'?'AniList fallback':work.synopsis.provider?'MyAnimeList catalogue':null),
+          sourceLanguage:existing?.sourceLanguage ?? 'en',
+          status:'complete',
+          lastError:null,
+          fetchedAt:existing?.fetchedAt ?? work.synopsis.fetchedAt ?? new Date().toISOString(),
+          translatedAt,
+          storage:'supabase',
+        })
+        if(verified.portuguese===portuguese)progress.succeeded+=1
+        else progress.failed+=1
+      }
+    }catch(error){
+      progress.failed+=1
+      console.error('AnimeFinder PT-BR synopsis translation backfill item failed.',{entity:work.id,error:error instanceof Error?error.message:String(error)})
+    }
+    progress.processed+=1;onProgress?.({...progress})
+    await new Promise((resolve)=>window.setTimeout(resolve,550))
+  }
+  progress.currentWork=undefined;onProgress?.({...progress});return progress
+}
