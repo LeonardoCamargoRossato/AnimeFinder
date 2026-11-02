@@ -1,5 +1,5 @@
 import { animeProvider } from './providers'
-import { translationService } from './TranslationService'
+import { isTranslationRateLimitError, translationService } from './TranslationService'
 import { findManagedWorkByMalId } from './personalCatalogManager'
 import { loadMasterDataSnapshot } from './masterData'
 import { isSupabaseConfigured, supabase } from './supabase'
@@ -10,7 +10,7 @@ export interface SynopsisBundle {
 }
 export type SynopsisStatus='complete'|'original_only'|'missing_source'|'failed'
 export interface StoredSynopsisRecord extends SynopsisBundle { personalWorkId:string; malId:number|null; sourceLanguage:string|null; lastError?:string|null }
-export interface SynopsisBackfillProgress { total:number; alreadyCached:number; processed:number; succeeded:number; missingSource:number; failed:number; currentWork?:string }
+export interface SynopsisBackfillProgress { total:number; alreadyCached:number; processed:number; succeeded:number; missingSource:number; failed:number; currentWork?:string; haltedReason?:string }
 type SynopsisWorkRef={id:string;displayName:string;primaryMalId:number|null}
 type AniListResponse={data?:{Media?:{description?:string|null}|null};errors?:Array<{message?:string}>}
 
@@ -78,7 +78,6 @@ export async function ensureSynopsisForWork(work:SynopsisWorkRef,force=false):Pr
 async function buildBundle(malId:number):Promise<SynopsisBundle>{
   const work=findManagedWorkByMalId(malId)
   if(work)return ensureSynopsisForWork(work)
-  // Non-personal discovery/details may use provider memory, because there is no Personal Work to persist yet.
   const fetched=await fetchOriginal(malId);if(!fetched.original)return{original:null,portuguese:null,source:null,storage:'memory'}
   try{return{original:fetched.original,portuguese:await translationService.translate(fetched.original,'en','pt-BR'),source:fetched.source,storage:'memory'}}catch(error){return{original:fetched.original,portuguese:null,source:fetched.source,translationError:error instanceof Error?error.message:'Automatic translation unavailable',storage:'memory'}}
 }
@@ -114,6 +113,7 @@ export async function backfillSynopsisTranslationsPtBr(onProgress?:(progress:Syn
   for(const work of pending){
     if(signal?.aborted)break
     progress.currentWork=work.displayName;onProgress?.({...progress})
+    let halt=false
     try{
       const existing=await loadRemote(work.id)
       const original=existing?.original ?? work.synopsis.original
@@ -139,10 +139,15 @@ export async function backfillSynopsisTranslationsPtBr(onProgress?:(progress:Syn
       }
     }catch(error){
       progress.failed+=1
+      if(isTranslationRateLimitError(error)){
+        progress.haltedReason=error.message
+        halt=true
+      }
       console.error('AnimeFinder PT-BR synopsis translation backfill item failed.',{entity:work.id,error:error instanceof Error?error.message:String(error)})
     }
     progress.processed+=1;onProgress?.({...progress})
-    await new Promise((resolve)=>window.setTimeout(resolve,550))
+    if(halt)break
+    await new Promise((resolve)=>window.setTimeout(resolve,650))
   }
   progress.currentWork=undefined;onProgress?.({...progress});return progress
 }
