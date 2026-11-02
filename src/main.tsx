@@ -11,6 +11,7 @@ import CharacterProfileProviderEnhancer from './CharacterProfileProviderEnhancer
 import FandomPersistenceEnhancer from './FandomPersistenceEnhancer'
 import MasterDataTableEnhancer from './MasterDataTableEnhancer'
 import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
+import PersonalKnowledgeChatBubbleEnhancer from './PersonalKnowledgeChatBubbleEnhancer'
 import HamletAIEnhancer from './HamletAIEnhancer'
 import HamletRecommendationsDrawerEnhancer from './HamletRecommendationsDrawerEnhancer'
 import HamletVoiceInputEnhancer from './HamletVoiceInputEnhancer'
@@ -48,6 +49,7 @@ import './master-data-single-source.css'
 import './single-source-v1.css'
 import './analytics.css'
 import './personal-knowledge-layout-hotfix.css'
+import './personal-knowledge-chat-bubbles.css'
 
 async function bootstrap() {
   await handleSupabaseAuthCallback()
@@ -68,6 +70,7 @@ async function bootstrap() {
         <FandomPersistenceEnhancer />
         <MasterDataTableEnhancer />
         <AIEnrichmentEnhancer />
+        <PersonalKnowledgeChatBubbleEnhancer />
         <HamletAIEnhancer />
         <HamletRecommendationsDrawerEnhancer />
         <HamletVoiceInputEnhancer />
