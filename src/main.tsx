@@ -14,6 +14,7 @@ import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
 import HamletAIEnhancer from './HamletAIEnhancer'
 import HamletRecommendationsDrawerEnhancer from './HamletRecommendationsDrawerEnhancer'
 import HamletVoiceInputEnhancer from './HamletVoiceInputEnhancer'
+import HamletTimestampHotfixEnhancer from './HamletTimestampHotfixEnhancer'
 import PersonalKnowledgeChatBubbleEnhancer from './PersonalKnowledgeChatBubbleEnhancer'
 import PersonalKnowledgeProfileDrawerEnhancer from './PersonalKnowledgeProfileDrawerEnhancer'
 import PersonalKnowledgeCommentHotfixEnhancer from './PersonalKnowledgeCommentHotfixEnhancer'
@@ -54,6 +55,7 @@ import './personal-knowledge-layout-hotfix.css'
 import './personal-knowledge-chat-bubbles.css'
 import './personal-knowledge-profile-drawer.css'
 import './personal-knowledge-comment-hotfix.css'
+import './chat-timestamps-hotfix.css'
 
 async function bootstrap() {
   await handleSupabaseAuthCallback()
@@ -77,6 +79,7 @@ async function bootstrap() {
         <HamletAIEnhancer />
         <HamletRecommendationsDrawerEnhancer />
         <HamletVoiceInputEnhancer />
+        <HamletTimestampHotfixEnhancer />
         <PersonalKnowledgeChatBubbleEnhancer />
         <PersonalKnowledgeProfileDrawerEnhancer />
         <PersonalKnowledgeCommentHotfixEnhancer />
