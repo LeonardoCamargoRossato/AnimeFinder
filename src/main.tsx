@@ -7,6 +7,8 @@ import PersonalCatalogManagerV2Enhancer from './PersonalCatalogManagerV2Enhancer
 import PersonalWorkAssociationEnhancer from './PersonalWorkAssociationEnhancer'
 import PersonalKnowledgeDetailsEnhancer from './PersonalKnowledgeDetailsEnhancer'
 import CharacterKnowledgeEnhancer from './CharacterKnowledgeEnhancer'
+import FandomPersistenceEnhancer from './FandomPersistenceEnhancer'
+import MasterDataTableEnhancer from './MasterDataTableEnhancer'
 import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import WishlistWatchedLockEnhancer from './WishlistWatchedLockEnhancer'
@@ -29,6 +31,8 @@ import './ai-personal-knowledge.css'
 import './character-knowledge.css'
 import './character-linking-fix.css'
 import './character-knowledge-v2.css'
+import './personal-knowledge-v3.css'
+import './master-data-table.css'
 import './analytics.css'
 
 async function bootstrap() {
@@ -42,6 +46,8 @@ async function bootstrap() {
         <PersonalWorkAssociationEnhancer />
         <PersonalKnowledgeDetailsEnhancer />
         <CharacterKnowledgeEnhancer />
+        <FandomPersistenceEnhancer />
+        <MasterDataTableEnhancer />
         <AIEnrichmentEnhancer />
         <WishlistEnhancer />
         <WishlistWatchedLockEnhancer />
