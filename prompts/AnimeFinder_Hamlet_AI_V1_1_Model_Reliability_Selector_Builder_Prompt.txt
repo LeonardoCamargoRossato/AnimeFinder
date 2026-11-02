@@ -1,0 +1,159 @@
+ANIMEFINDER — HAMLET AI V1.1
+MODEL RELIABILITY + MODEL SELECTOR
+
+Repository:
+LeonardoCamargoRossato/AnimeFinder
+
+GOAL
+
+Upgrade the existing Hamlet AI implementation incrementally. Do NOT rebuild Hamlet from scratch.
+
+Priority:
+1. Reliability
+2. Low latency
+3. Availability
+4. Quality
+
+Hamlet does not need the most intelligent model for every request.
+
+1. DEFAULT MODEL
+
+Production default:
+
+gemini-3.5-flash-lite
+
+Do not use gemini-3.8-flash as the default.
+
+2. AUTOMATIC GEMINI FALLBACK
+
+Default reliability order:
+
+1. gemini-3.5-flash-lite
+2. gemini-3.1-flash-lite
+3. gemini-3.6-flash
+4. gemini-3.8-flash
+
+Fallback is allowed for transient/provider conditions including 429, 500, 502, 503, 504, timeout, network failure and temporary model unavailability.
+
+Do not retry endlessly. Use a short timeout per attempt, around 10–15 seconds maximum. Keep an overall request budget so the Supabase worker cannot remain alive indefinitely.
+
+Authentication failures, invalid API keys, malformed requests, unsupported models and application/structured-output errors must stop cleanly instead of blindly trying every model.
+
+3. ACTUAL RESPONDING MODEL
+
+The Edge Function response must include the actual successful provider/model:
+
+{
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "preferredModel": "gemini-3.5-flash-lite",
+  "fallbackUsed": true
+}
+
+Never report the configured/default model when another model actually produced the answer.
+
+4. ACTIVE MODEL UI
+
+Near/below Clear Conversation, show a compact model indicator:
+
+Model
+Gemini 3.5 Flash-Lite ▾
+
+It must show the model used by Hamlet's latest successful response. If fallback succeeds on another model, update automatically.
+
+A subtle fallback status may say:
+
+Fallback model — preferred model temporarily unavailable.
+
+5. MODEL SELECTOR
+
+The model indicator is clickable.
+
+First level:
+
+Gemini — AVAILABLE
+GPT — UNAVAILABLE
+Claude — UNAVAILABLE
+
+GPT and Claude are visual preparation only. Do not implement OpenAI or Anthropic APIs. Disabled providers should explain on hover:
+
+Provider not available yet.
+
+6. GEMINI MODELS
+
+Gemini submenu:
+
+Gemini 3.5 Flash-Lite
+Gemini 3.1 Flash-Lite
+Gemini 3.6 Flash
+Gemini 3.8 Flash
+
+Default preferred selection:
+Gemini 3.5 Flash-Lite
+
+Manual selection changes the FIRST preferred model only. It does not disable fallback. Remaining supported Gemini models continue as backups.
+
+7. FALLBACK UX
+
+Fallback is normally silent. If another Gemini model answers successfully, do not insert technical errors into the conversation. Only update the active model indicator and optional subtle fallback status.
+
+8. ALL MODELS FAIL
+
+Stop processing cleanly and return a controlled structured error. Frontend must remove Hamlet is thinking... and show:
+
+Hamlet is temporarily unavailable. Please try again.
+
+Traditional Search remains available.
+
+9. OBSERVABILITY
+
+Add concise server logs for each attempt:
+
+Hamlet model attempt: model/status/duration
+Hamlet fallback: next model
+Hamlet success: actual model/duration
+
+Never log API keys, auth tokens or full conversation content.
+
+10. ARCHITECTURE
+
+Keep Hamlet provider-agnostic:
+
+Hamlet UI
+→ AIProvider
+→ GeminiProvider
+→ authenticated Supabase Edge Function hamlet-ai
+→ Gemini Interactions API
+
+Prepare UI labels for future providers:
+Gemini
+GPT
+Claude
+
+Only Gemini works in V1.1.
+
+11. PRESERVE
+
+Preserve:
+- Supabase authentication
+- single-user authorization
+- GitHub Pages compatibility
+- current Hamlet conversation UI
+- structured anime-search intent
+- traditional Search fallback
+- current AnimeFinder architecture
+- no persistent Hamlet conversation storage yet
+
+Never expose GEMINI_API_KEY to browser/front-end/localStorage/database.
+
+12. DELIVERY
+
+Implement and report:
+- files changed
+- fallback architecture
+- timeout strategy
+- model selector behavior
+- how actual responding model reaches UI
+- whether Supabase secrets require changes
+- exact Edge Function deployment command
+- build/deploy validation
