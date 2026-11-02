@@ -1,0 +1,129 @@
+/* Hamlet AI voice-input hotfix. Composer-only; no persistence changes. */
+
+.hamlet-composer.hamlet-composer-voice-enabled {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: stretch;
+}
+
+.hamlet-voice-host {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+}
+
+.hamlet-voice-control {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+}
+
+.hamlet-voice-button {
+  width: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
+  color: var(--text);
+  font: inherit;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.hamlet-voice-button:hover,
+.hamlet-voice-button:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: none;
+}
+
+.hamlet-voice-control.is-listening .hamlet-voice-button {
+  border-color: #ff6b7a;
+  background: color-mix(in srgb, var(--surface) 76%, #ff5d70 24%);
+  color: #ff7b88;
+  box-shadow: 0 0 0 3px rgba(255,93,112,.13), 0 0 18px rgba(255,93,112,.35);
+  animation: hamlet-voice-pulse 1.15s ease-in-out infinite;
+}
+
+.hamlet-voice-control.is-processing .hamlet-voice-button {
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: progress;
+  animation: hamlet-voice-processing .9s linear infinite;
+}
+
+.hamlet-voice-control.is-ready .hamlet-voice-button {
+  border-color: #58c98b;
+  background: color-mix(in srgb, var(--surface) 82%, #58c98b 18%);
+  color: #58c98b;
+  box-shadow: 0 0 0 3px rgba(88,201,139,.12);
+}
+
+.hamlet-voice-control.is-error .hamlet-voice-button,
+.hamlet-voice-control.is-unsupported .hamlet-voice-button {
+  border-color: color-mix(in srgb, #f0a83b 62%, var(--border));
+}
+
+.hamlet-voice-feedback {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 80;
+  width: max-content;
+  max-width: min(310px, calc(100vw - 32px));
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--accent) 4%);
+  color: var(--text);
+  box-shadow: 0 10px 28px rgba(0,0,0,.24);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.hamlet-voice-control.is-listening .hamlet-voice-feedback {
+  border-color: color-mix(in srgb, #ff6b7a 58%, var(--border));
+}
+
+@keyframes hamlet-voice-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}
+
+@keyframes hamlet-voice-processing {
+  0% { box-shadow: inset 0 0 0 0 color-mix(in srgb, var(--accent) 24%, transparent); }
+  50% { box-shadow: inset 0 0 0 24px color-mix(in srgb, var(--accent) 10%, transparent); }
+  100% { box-shadow: inset 0 0 0 0 color-mix(in srgb, var(--accent) 24%, transparent); }
+}
+
+@media (max-width: 560px) {
+  .hamlet-composer.hamlet-composer-voice-enabled {
+    gap: 7px;
+  }
+
+  .hamlet-voice-button {
+    width: 46px;
+    min-width: 46px;
+    min-height: 46px;
+    font-size: 18px;
+  }
+
+  .hamlet-voice-feedback {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(env(safe-area-inset-bottom) + 86px);
+    width: auto;
+    max-width: none;
+    text-align: center;
+    font-size: 11px;
+  }
+}
