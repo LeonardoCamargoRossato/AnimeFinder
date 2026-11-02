@@ -64,12 +64,12 @@ export default function HamletAIWorkspace() {
     const message = draft.trim()
     if (!message || thinking) return
     const userMessage = makeMessage('user', message)
-    const conversation = [...messages, userMessage]
-    setMessages(conversation); setDraft(''); setThinking(true); setError('')
+    const priorConversation = messages.map(({ role, content }) => ({ role, content }))
+    setMessages((current) => [...current, userMessage]); setDraft(''); setThinking(true); setError('')
     try {
       const response = await hamletAIProvider.sendMessage({
         message,
-        conversation: conversation.map(({ role, content }) => ({ role, content })),
+        conversation: priorConversation,
         currentIntent: intent,
       })
       setMessages((current) => [...current, makeMessage('assistant', response.reply)])
