@@ -1,0 +1,37 @@
+.chat-message-timestamp {
+  display: block;
+  margin-top: 4px;
+  font-size: 9px !important;
+  font-weight: 650 !important;
+  line-height: 1.2;
+  letter-spacing: .01em !important;
+  color: var(--muted) !important;
+  opacity: .72;
+  text-transform: none !important;
+}
+
+.pk-message.assistant > div > .chat-message-timestamp {
+  padding: 0;
+  text-align: left;
+}
+
+.pk-user-bubble > .chat-message-timestamp {
+  margin-top: 3px;
+  text-align: right;
+}
+
+.hamlet-message > .chat-message-timestamp {
+  padding: 0 5px;
+}
+
+.hamlet-message.user > .chat-message-timestamp {
+  text-align: right;
+}
+
+.hamlet-message.assistant > .chat-message-timestamp {
+  text-align: left;
+}
+
+.pk-conversation-replies:empty {
+  display: none;
+}
