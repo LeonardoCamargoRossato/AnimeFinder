@@ -1,0 +1,187 @@
+ANIMEFINDER — CHARACTER KNOWLEDGE V2
+FANDOM FALLBACK + CHARACTER EXTERNAL LINKS + MY PERSONAL KNOWLEDGE RESPONSIVE REDESIGN
+
+Implementar esta versão SOBRE a implementação atual. NÃO reconstruir Jikan Character Knowledge, Character Profile, AI Personal Knowledge, ranking, comments, keywords ou linking já existentes.
+
+OBJETIVOS
+1. Manter Jikan/MAL como provider principal de personagens.
+2. Adicionar Fandom como provider secundário/fallback e fonte complementar.
+3. Permitir múltiplas external sources por Personal Character.
+4. Após confirmação humana, usar o canonical name do provider como display name, preservando o nome originalmente digitado em metadata/provenance.
+5. Redesenhar My Personal Knowledge para uma coluna vertical full-width, responsiva e limpa.
+6. Preservar performance: cache-first, sem requests externos por card no render.
+7. Toda a UI do app continua em inglês; conteúdo pessoal pode permanecer em português.
+
+PRINCÍPIO CENTRAL
+PERSONAL KNOWLEDGE FIRST.
+JIKAN AS PRIMARY EXTERNAL CHARACTER PROVIDER.
+FANDOM AS SECONDARY/FALLBACK KNOWLEDGE SOURCE.
+FAST, RESPONSIVE AND CACHE-FIRST UI.
+
+JIKAN
+- Preservar CharacterProvider/JikanCharacterProvider.
+- Melhorar matching para diacríticos, romanizações simples, nome invertido e nomes parciais.
+- Não alterar identidade antes da confirmação.
+- Ao confirmar match, salvar Jikan identity e atualizar display name para canonical name.
+- Preservar original personal name em metadata.
+
+FANDOM
+- Nunca substituir Jikan como fonte principal.
+- Não pesquisar automaticamente em massa.
+- Mostrar Try Fandom apenas por ação do usuário quando necessário e também permitir Find on Fandom no Character Profile.
+- Usar API estruturada MediaWiki/Fandom via api.php quando possível; evitar scraping frágil.
+- Buscar preferencialmente na wiki relacionada à obra.
+- Para World Trigger usar World Trigger Wiki/Fandom como hint conhecido.
+- Resultado deve mostrar canonical page title, wiki/domain, imagem quando confiável e pequena descrição quando disponível.
+- Não confirmar automaticamente.
+- Botões: Confirm Fandom Match / Search Again / Retry em falha.
+- Se Fandom estiver indisponível: Personal Knowledge continua funcionando e mostrar Fandom temporarily unavailable + Retry.
+
+EXTERNAL SOURCES
+Um Personal Character pode ter simultaneamente:
+- Jikan/MAL identity
+- Fandom identity
+
+Persistir por source:
+- personal_work_id
+- personal_character_id
+- provider (jikan/fandom)
+- external_id
+- canonical_name
+- url
+- image_url
+- metadata_json
+- confirmed
+- last_synced_at
+
+Não sobrescrever:
+- My Comment
+- My Keywords
+- Personal Rank
+- character comments
+- Personal Knowledge versions
+- Original Observations
+
+CHARACTER PROFILE
+Sempre personal-first.
+
+CHARACTER PROFILE
+Photo
+Canonical/display name
+Personal rank
+
+MY KNOWLEDGE
+- My Comment
+- My Keywords
+
+CHARACTER INFORMATION
+- Jikan metadata when linked/available
+- Fandom description only when useful
+
+EXTERNAL SOURCES
+- Fandom ↗ first when linked
+- MyAnimeList ↗ second when linked
+
+Se não houver Jikan:
+No Jikan character linked.
+[ Search Jikan ] [ Try Fandom ]
+
+Character Profile deve abrir mesmo para personagem sem qualquer provider externo.
+
+CANONICAL NAME
+Fluxo obrigatório:
+Personal name → provider suggestion → user confirms → canonical provider name becomes display name.
+
+Preservar original personal name em metadata da external source.
+
+WORLD TRIGGER TEST
+Personal Work: World Trigger
+Personagens pessoais:
+1. Osamu Mikumo
+2. Replica
+3. Hyuse
+4. Yuichi Jin
+5. Yuma Kuga
+6. Soya Kazama
+
+Caso real:
+Soya Kazama / Sōya Kazama.
+Se Jikan não tiver match confiável:
+No reliable Jikan match found.
+[ Search manually ] [ Try Fandom ]
+
+Confirmar Fandom deve salvar a página correspondente e fazer o Character Profile mostrar Fandom ↗.
+
+MY PERSONAL KNOWLEDGE REDESIGN
+Trocar layout horizontal de três cards por UMA coluna principal:
+
+MY PERSONAL KNOWLEDGE                         [✨ Open AI Personal Knowledge]
+Your personal comments, confirmed keywords and ranked characters for this work.
+
+MY COMMENT — FULL WIDTH
+- compacto por padrão (~1 parágrafo + parte do segundo)
+- fade inferior
+- Show more / Show less
+
+KEYWORDS — FULL WIDTH
+- chips em flex-wrap
+- sem lista vertical estreita
+- sem horizontal scroll
+
+FAVORITE / HIGHLIGHTED CHARACTERS — FULL WIDTH
+- cards fluidos, não grid fixo 2x3
+- desktop grande pode mostrar 6 na linha
+- desktop menor 4+2
+- tablet 3+3
+- mobile 2+2+2 ou 1 por linha quando necessário
+- deixar CSS responder à largura disponível
+
+CHARACTER CARD
+Mostrar:
+- photo (Jikan cache primeiro, Fandom fallback, iniciais se imagem falhar)
+- personal rank
+- canonical/display name
+- status discreto: Jikan ✓ / Fandom ✓ quando aplicável
+
+Todo Character Card deve ser clicável, mesmo sem Jikan.
+
+HEADER
+Desktop: botão Open AI Personal Knowledge no canto superior direito do header.
+Mobile: botão permanece dentro do header, abaixo do título se necessário.
+Nunca colocar o botão abaixo de todos os cards.
+
+PERFORMANCE
+- Não buscar Jikan/Fandom ao renderizar todos os cards.
+- Cards usam somente cache existente.
+- Buscar metadata externa apenas ao linking, Character Profile, ação manual Try Fandom/Find on Fandom ou refresh controlado.
+- Cachear fontes confirmadas.
+- Provider offline nunca bloqueia Personal Knowledge.
+
+RESPONSIVIDADE
+- sem overflow horizontal
+- comment full width
+- keywords wrap
+- characters wrap
+- Character Profile utilizável no mobile
+
+NÃO IMPLEMENTAR NESTA VERSÃO
+- scraping massivo do Fandom
+- indexação completa de wikis
+- RAG global
+- embeddings
+- recommendation engine
+- Wikipedia
+- AniList
+- download massivo de imagens
+
+TESTES DE ACEITAÇÃO
+1. Confirmar Jikan match → display name vira canonical name.
+2. World Trigger/Soya Kazama sem match confiável → Try Fandom disponível.
+3. Confirmar Fandom → source persistida e botão Fandom ↗ aparece.
+4. Osamu já Jikan-linked continua com foto/metadata/personal knowledge e pode ganhar Fandom adicional.
+5. Personagem sem Jikan abre Character Profile e My Knowledge normalmente.
+6. My Personal Knowledge desktop: full-width vertical, botão AI no header, keywords chips, personagens fluidos.
+7. Mobile: sem overflow, cards responsivos, botão AI no header.
+8. Fandom offline: mostrar erro + Retry sem quebrar Personal Knowledge.
+9. Nenhuma regressão em ranking, comments, keywords, Character Profile ou Jikan linking.
+10. Rodar TypeScript/Vite build e validar GitHub Pages antes de considerar concluído.
