@@ -67,6 +67,33 @@ const legacySnapshot: PersonalCatalogItem[] = rawSnapshot.map((item) => ({
   category: item.category,
 }))
 
+// Compatibility projection populated ONLY from the Supabase-hydrated manager.
+// Older components can keep their synchronous helpers without reading the legacy arrays.
+let runtimeCatalog: PersonalCatalogItem[] = []
+let runtimeHydrated = false
+
+export function setRuntimePersonalCatalog(items: PersonalCatalogItem[]) {
+  runtimeCatalog = items.map((item) => ({ ...item }))
+  runtimeHydrated = true
+}
+
+export function clearRuntimePersonalCatalog() {
+  runtimeCatalog = []
+  runtimeHydrated = false
+}
+
+function runtimeRows() {
+  return runtimeHydrated ? runtimeCatalog : []
+}
+
+export function isPersonalCatalogWatched(malId: number) {
+  return runtimeRows().some((item) => item.watched && item.malId === malId)
+}
+
+export function personalCatalogWatchedItems() {
+  return runtimeRows().filter((item) => item.watched)
+}
+
 const metadataPromises = new Map<number, Promise<Anime>>()
 const metadataMemory = new Map<number, Anime>()
 
@@ -167,16 +194,20 @@ async function ensureMetadata(malId: number): Promise<Anime> {
 }
 
 export const personalCatalogRepository = {
-  /** Legacy migration source only. Runtime UI must use personalCatalogManager/Supabase. */
-  list(category: PersonalCatalogCategory): PersonalCatalogItem[] { return legacySnapshot.filter((item) => item.category === category) },
+  /** Legacy migration source only before hydration; runtime callers see the Supabase projection. */
+  list(category: PersonalCatalogCategory): PersonalCatalogItem[] {
+    return (runtimeHydrated ? runtimeCatalog : legacySnapshot).filter((item) => item.category === category)
+  },
   search(category: PersonalCatalogCategory, query: string): PersonalCatalogItem[] {
     const term = normalize(query.trim())
     return this.list(category).filter((item) => !term || normalize([item.anime,item.englishName,item.originalName,item.originalObservations].filter(Boolean).join(' ')).includes(term))
   },
-  findByMalId(malId: number): PersonalCatalogItem | null { return legacySnapshot.find((item) => item.malId === malId) ?? null },
-  isWatched(malId: number): boolean { return legacySnapshot.some((item) => item.category === 'watched' && item.malId === malId) },
-  watchedCount(): number { return legacySnapshot.filter((item) => item.category === 'watched').length },
-  watchedMalIds(): Set<number> { return new Set(legacySnapshot.filter((item) => item.category === 'watched' && item.malId != null).map((item) => item.malId as number)) },
+  findByMalId(malId: number): PersonalCatalogItem | null {
+    return runtimeRows().find((item) => item.malId === malId) ?? null
+  },
+  isWatched(malId: number): boolean { return isPersonalCatalogWatched(malId) },
+  watchedCount(): number { return personalCatalogWatchedItems().length },
+  watchedMalIds(): Set<number> { return new Set(personalCatalogWatchedItems().map((item) => item.malId).filter((id): id is number => id != null)) },
   getCachedMetadata(malId: number): Anime | null { return metadataMemory.get(malId) ?? null },
   getMetadata(malId: number): Promise<Anime> {
     const resolved = metadataMemory.get(malId)
@@ -189,7 +220,7 @@ export const personalCatalogRepository = {
     metadataPromises.set(malId, request)
     return request
   },
-  count(): number { return legacySnapshot.length },
+  count(): number { return runtimeHydrated ? runtimeCatalog.length : legacySnapshot.length },
 }
 
 export function legacyPersonalCatalogSnapshot() { return legacySnapshot.map((row) => ({ ...row })) }
