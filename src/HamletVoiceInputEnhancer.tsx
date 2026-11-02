@@ -72,16 +72,27 @@ function feedbackForError(error: string) {
   switch (error) {
     case 'not-allowed':
     case 'service-not-allowed':
-      return 'Microphone access was denied. You can keep typing normally.'
+      return 'Microphone access was denied. Allow microphone access for AnimeFinder and try again.'
     case 'audio-capture':
-      return 'No microphone is available. You can keep typing normally.'
+      return 'No microphone is available, or another app is using it.'
     case 'no-speech':
       return "I didn't catch that. Try speaking again."
     case 'network':
-      return 'Voice transcription is temporarily unavailable. Try again or keep typing.'
+      return 'The browser speech service could not connect. Try again; if it persists, check Edge speech/microphone permissions.'
     default:
       return 'Voice input stopped. You can try again or keep typing.'
   }
+}
+
+function feedbackForMediaError(reason: unknown) {
+  if (reason instanceof DOMException) {
+    if (reason.name === 'NotAllowedError' || reason.name === 'SecurityError') {
+      return 'Microphone access was denied. Allow microphone access for AnimeFinder and try again.'
+    }
+    if (reason.name === 'NotFoundError') return 'No microphone was found on this device.'
+    if (reason.name === 'NotReadableError') return 'The microphone is busy or unavailable. Close other apps using it and try again.'
+  }
+  return 'Could not access the microphone. Check browser permissions and try again.'
 }
 
 export default function HamletVoiceInputEnhancer() {
@@ -91,6 +102,7 @@ export default function HamletVoiceInputEnhancer() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const baseDraftRef = useRef('')
   const finalTranscriptRef = useRef('')
+  const interimTranscriptRef = useRef('')
   const cancelledRef = useRef(false)
   const errorRef = useRef(false)
   const feedbackTimerRef = useRef<number | null>(null)
@@ -149,7 +161,7 @@ export default function HamletVoiceInputEnhancer() {
     showFeedback('Voice input cancelled.', 1800)
   }
 
-  function beginListening() {
+  async function beginListening() {
     if (state === 'listening') {
       cancelListening()
       return
@@ -165,38 +177,57 @@ export default function HamletVoiceInputEnhancer() {
     const textarea = document.querySelector('.hamlet-composer textarea') as HTMLTextAreaElement | null
     if (!textarea) return
 
+    setFeedback('')
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream.getTracks().forEach((track) => track.stop())
+      } catch (reason) {
+        setState('error')
+        showFeedback(feedbackForMediaError(reason), 5600)
+        return
+      }
+    }
+
     const recognition = new SpeechRecognition()
     recognitionRef.current = recognition
     baseDraftRef.current = textarea.value.trim()
     finalTranscriptRef.current = ''
+    interimTranscriptRef.current = ''
     cancelledRef.current = false
     errorRef.current = false
 
-    recognition.lang = document.documentElement.lang || navigator.language || 'pt-BR'
+    // Prefer the user's browser/OS language. The app UI can be English while the user speaks Portuguese.
+    recognition.lang = navigator.language || document.documentElement.lang || 'pt-BR'
     recognition.continuous = false
     recognition.interimResults = true
     recognition.maxAlternatives = 1
 
     recognition.onstart = () => {
       setState('listening')
-      showFeedback('Listening… click the microphone again to cancel.', 0)
+      showFeedback('Listening… tap the microphone again to cancel.', 0)
     }
 
     recognition.onresult = (event) => {
       let finalText = finalTranscriptRef.current
+      let interimText = ''
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index]
         const transcript = result[0]?.transcript?.trim() ?? ''
-        if (result.isFinal && transcript) finalText = `${finalText} ${transcript}`.trim()
+        if (!transcript) continue
+        if (result.isFinal) finalText = `${finalText} ${transcript}`.trim()
+        else interimText = `${interimText} ${transcript}`.trim()
       }
       finalTranscriptRef.current = finalText
+      interimTranscriptRef.current = interimText
     }
 
     recognition.onerror = (event) => {
       if (cancelledRef.current) return
       errorRef.current = true
       setState('error')
-      showFeedback(feedbackForError(event.error), 5200)
+      showFeedback(feedbackForError(event.error), 5600)
     }
 
     recognition.onend = () => {
@@ -210,7 +241,8 @@ export default function HamletVoiceInputEnhancer() {
         return
       }
 
-      const transcript = finalTranscriptRef.current.trim()
+      // Some Chromium/Edge sessions end with a useful interim result but no final result.
+      const transcript = (finalTranscriptRef.current || interimTranscriptRef.current).trim()
       if (!transcript) {
         setState('idle')
         showFeedback("I didn't catch anything. Try speaking again.", 3200)
@@ -228,7 +260,7 @@ export default function HamletVoiceInputEnhancer() {
         }
         const cleaned = normalizeTranscript(transcript)
         const base = baseDraftRef.current
-        const nextValue = base ? `${base}${/[.!?…]$/.test(base) ? ' ' : ' '}${cleaned}` : cleaned
+        const nextValue = base ? `${base} ${cleaned}` : cleaned
         updateReactTextarea(currentTextarea, nextValue)
         setState('ready')
         showFeedback('Transcription ready — review or edit it before sending.', 4200)
@@ -241,7 +273,7 @@ export default function HamletVoiceInputEnhancer() {
     } catch {
       recognitionRef.current = null
       setState('error')
-      showFeedback('Could not start the microphone. Try again or keep typing.', 4200)
+      showFeedback('Could not start speech recognition. Check microphone permission and try again.', 4600)
     }
   }
 
@@ -258,7 +290,7 @@ export default function HamletVoiceInputEnhancer() {
       <button
         className="hamlet-voice-button"
         type="button"
-        onClick={beginListening}
+        onClick={() => void beginListening()}
         disabled={state === 'processing'}
         aria-label={label}
         title={label}
