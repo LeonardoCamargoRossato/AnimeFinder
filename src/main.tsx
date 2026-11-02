@@ -11,6 +11,7 @@ import CharacterProfileProviderEnhancer from './CharacterProfileProviderEnhancer
 import FandomPersistenceEnhancer from './FandomPersistenceEnhancer'
 import MasterDataTableEnhancer from './MasterDataTableEnhancer'
 import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
+import HamletAIEnhancer from './HamletAIEnhancer'
 import WishlistEnhancer from './WishlistEnhancer'
 import WishlistWatchedLockEnhancer from './WishlistWatchedLockEnhancer'
 import WorldTriggerKeywordHotfixEnhancer from './WorldTriggerKeywordHotfixEnhancer'
@@ -31,6 +32,7 @@ import './personal-catalog-manager.css'
 import './personal-catalog-v2.css'
 import './ai-enrichment.css'
 import './ai-personal-knowledge.css'
+import './hamlet-ai.css'
 import './character-knowledge.css'
 import './character-linking-fix.css'
 import './character-knowledge-v2.css'
@@ -59,6 +61,7 @@ async function bootstrap() {
         <FandomPersistenceEnhancer />
         <MasterDataTableEnhancer />
         <AIEnrichmentEnhancer />
+        <HamletAIEnhancer />
         <WishlistEnhancer />
         <WishlistWatchedLockEnhancer />
         <WorldTriggerKeywordHotfixEnhancer />
