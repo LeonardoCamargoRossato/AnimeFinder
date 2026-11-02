@@ -7,6 +7,7 @@ import PersonalCatalogManagerV2Enhancer from './PersonalCatalogManagerV2Enhancer
 import PersonalWorkAssociationEnhancer from './PersonalWorkAssociationEnhancer'
 import PersonalKnowledgeDetailsEnhancer from './PersonalKnowledgeDetailsEnhancer'
 import CharacterKnowledgeEnhancer from './CharacterKnowledgeEnhancer'
+import CharacterProfileProviderEnhancer from './CharacterProfileProviderEnhancer'
 import FandomPersistenceEnhancer from './FandomPersistenceEnhancer'
 import MasterDataTableEnhancer from './MasterDataTableEnhancer'
 import AIEnrichmentEnhancer from './AIEnrichmentEnhancer'
@@ -35,18 +36,14 @@ import './character-linking-fix.css'
 import './character-knowledge-v2.css'
 import './personal-knowledge-v3.css'
 import './master-data-table.css'
+import './master-data-single-source.css'
+import './single-source-v1.css'
 import './analytics.css'
 
 async function bootstrap() {
   await handleSupabaseAuthCallback()
-
-  // One-time bridge only: move historical browser/hardcoded data into Supabase before
-  // the runtime starts. Failed migration steps retain their old browser key so data is
-  // never destroyed before a verified server write.
   try { await migrateLegacyBrowserPersistence() }
   catch (error) { console.error('AnimeFinder legacy migration bootstrap failed.', error) }
-
-  // Runtime catalog state is reconstructed from Supabase. No localStorage catalog is read.
   try { await hydrateManagedCatalog() }
   catch (error) { console.error('AnimeFinder Supabase catalog hydration failed.', error) }
 
@@ -58,6 +55,7 @@ async function bootstrap() {
         <PersonalWorkAssociationEnhancer />
         <PersonalKnowledgeDetailsEnhancer />
         <CharacterKnowledgeEnhancer />
+        <CharacterProfileProviderEnhancer />
         <FandomPersistenceEnhancer />
         <MasterDataTableEnhancer />
         <AIEnrichmentEnhancer />
