@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import HamletAIWorkspace from './HamletAIWorkspace'
 import './hamlet-viewport-hotfix.css'
+import './hamlet-chat-bubbles-hotfix.css'
 
 type DiscoverMode = 'search' | 'hamlet'
 
