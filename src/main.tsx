@@ -16,6 +16,8 @@ import WorldTriggerKeywordHotfixEnhancer from './WorldTriggerKeywordHotfixEnhanc
 import EnglishUiPolishEnhancer from './EnglishUiPolishEnhancer'
 import CatalogPdfMenuEnhancer from './CatalogPdfMenuEnhancer'
 import { handleSupabaseAuthCallback } from './authCallback'
+import { migrateLegacyBrowserPersistence } from './legacyPersistenceMigration'
+import { hydrateManagedCatalog } from './personalCatalogManager'
 import './styles.css'
 import './auth.css'
 import './synopsis.css'
@@ -37,6 +39,16 @@ import './analytics.css'
 
 async function bootstrap() {
   await handleSupabaseAuthCallback()
+
+  // One-time bridge only: move historical browser/hardcoded data into Supabase before
+  // the runtime starts. Failed migration steps retain their old browser key so data is
+  // never destroyed before a verified server write.
+  try { await migrateLegacyBrowserPersistence() }
+  catch (error) { console.error('AnimeFinder legacy migration bootstrap failed.', error) }
+
+  // Runtime catalog state is reconstructed from Supabase. No localStorage catalog is read.
+  try { await hydrateManagedCatalog() }
+  catch (error) { console.error('AnimeFinder Supabase catalog hydration failed.', error) }
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
