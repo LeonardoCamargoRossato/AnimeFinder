@@ -1,0 +1,36 @@
+ANIMEFINDER — DATA INTEGRITY & MASTER DATA TABLE FIX
+SUPABASE SOURCE OF TRUTH + SYNOPSIS CACHE + FANDOM PERSISTENCE + EXPORT/PDF
+
+GOAL
+This is not a redesign. Preserve the current Master Data Table aesthetics. Fix the data pipeline so Supabase is the single source of truth. Jikan/Fandom are enrichment providers only.
+
+MANDATORY ARCHITECTURE
+Jikan / Fandom -> enrichment -> Supabase -> Anime Details / Personal Knowledge / Character Profile / Master Data Table / exports.
+Never silently build Master Data from a mixture of Supabase + localStorage + hardcoded catalog + live provider requests.
+
+IMPLEMENTATION
+1. Audit the repository schema/migrations for Personal Works, rankings, MAL IDs, comments, keywords, characters, external links and synopsis.
+2. Create an explicit Master Data source map.
+3. Make personal_catalog_works the base relation for the Master Table. Optional relations must use LEFT JOIN/correlated aggregate semantics so missing optional data never removes a work.
+4. Add one efficient aggregate RPC/view for the Master Table. Do not issue N relation queries per row.
+5. Persist genres in Supabase. Add a controlled metadata backfill with rate limiting and read-after-write verification.
+6. Persist synopsis_original + synopsis_pt_br + provider/source language/fetched/translated timestamps/status. Backfill must be real, resumable and observable.
+7. Anime Details must read persisted synopsis/cache before provider fetch. Provider refresh only when data is missing or explicitly refreshed.
+8. Character Knowledge JSON must be derived from normalized relations: personal_work_characters + latest character comments + confirmed character keywords + external sources.
+9. Fix Fandom persistence with WRITE -> Supabase response -> READ-BACK -> verify fields -> invalidate/update cache -> update UI -> only then show success.
+10. Character Profile must automatically consume confirmed Fandom metadata after reload; do not ask to link again.
+11. Add data completeness flags per work: MAL ID, genres, original synopsis, PT-BR synopsis, comment, keywords, characters, external links.
+12. Compare database category counts against Master Table counts and report missing IDs.
+13. Preserve CSV/JSON and add/refine Print and A4 landscape PDF. PDF must look like a table, contain page X of Y, AnimeFinder branding and authorship footer: Created by Leonardo Camargo Rossato · LCR Solutions Architecture — IA & Quantum, with portfolio link when supported.
+14. Google Sheets export must remain disabled until explicit Sheets write OAuth scope exists. Supabase remains source of truth.
+15. Never show Saved/Linked/Cached/Translated until required persistence has been verified.
+
+CRITICAL TESTS
+- World Trigger must remain present even if optional relations are null.
+- World Trigger must expose persisted comment, keywords, characters, genres, synopsis and Character Knowledge when those rows exist in Supabase.
+- Sōya Kazama Fandom link must survive hard reload and automatically appear in Character Profile after verified persistence.
+- World Trigger, Fullmetal Alchemist Brotherhood and Death Note synopsis must be persisted and then load from Supabase/cache rather than requiring a new provider request.
+- For every category, database count must equal full Master Table count.
+
+FINAL REPORT
+Report database tables/RPCs/migrations, exact Master column sources, catalog counts, synopsis status counts, genre completeness, Character Knowledge projection, exact Fandom bug/fix, export status, Google Sheets OAuth status and performance behavior. Never invent database/backfill counts that were not actually observed.
