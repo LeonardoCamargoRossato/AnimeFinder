@@ -47,6 +47,7 @@ import './master-data-table.css'
 import './master-data-single-source.css'
 import './single-source-v1.css'
 import './analytics.css'
+import './personal-knowledge-layout-hotfix.css'
 
 async function bootstrap() {
   await handleSupabaseAuthCallback()
