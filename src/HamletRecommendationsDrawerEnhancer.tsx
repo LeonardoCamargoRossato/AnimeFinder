@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { getLastHamletSearchMeta } from './hamletSearchService'
 
 type DrawerMode = 'closed' | 'normal' | 'fullscreen'
 
@@ -54,7 +55,9 @@ export default function HamletRecommendationsDrawerEnhancer() {
       setPanel((current) => current === nextPanel ? current : nextPanel)
       setActionHost((current) => current === nextActionHost ? current : nextActionHost)
       setControlsHost((current) => current === nextControlsHost ? current : nextControlsHost)
-      setRecommendationCount(nextPanel.querySelectorAll('.hamlet-compact-card').length)
+      const renderedCount = nextPanel.querySelectorAll('.hamlet-compact-card').length
+      const meta = getLastHamletSearchMeta()
+      setRecommendationCount(meta.catalogTotal || renderedCount)
     }
 
     sync()
@@ -96,7 +99,7 @@ export default function HamletRecommendationsDrawerEnhancer() {
       >
         <span className="hamlet-view-recommendations-icon">✦</span>
         <span className="hamlet-view-recommendations-label">Ver recomendações</span>
-        <span className="hamlet-view-recommendations-count">{recommendationCount}</span>
+        <span className="hamlet-view-recommendations-count">{recommendationCount.toLocaleString('pt-BR')}</span>
       </button>,
       actionHost,
     )}
