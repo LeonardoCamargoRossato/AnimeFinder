@@ -78,6 +78,27 @@
   overflow-wrap: anywhere;
 }
 
+/* While editing, let the conversation editor consume the free vertical space so the text area
+   reaches almost to the action row instead of leaving a large empty gap. */
+.pk-message.user:has(textarea) {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.pk-message.user:has(textarea) > .pk-user-bubble {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 280px;
+}
+
+.pk-message.user:has(textarea) .pk-user-bubble textarea {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
 .pk-suggestion {
   width: 100%;
   min-width: 0 !important;
@@ -100,8 +121,8 @@
   align-self: stretch;
   width: 100%;
   max-width: 100%;
-  margin-top: auto;
-  padding: 12px 0 4px;
+  margin-top: 6px;
+  padding: 8px 0 4px;
   justify-content: flex-end;
   align-items: center;
   gap: 10px;
@@ -151,6 +172,10 @@
   .pk-message.user > .pk-user-bubble,
   .pk-message.assistant > div {
     max-width: 100%;
+  }
+
+  .pk-message.user:has(textarea) > .pk-user-bubble {
+    min-height: 220px;
   }
 
   .pk-compose-actions {
