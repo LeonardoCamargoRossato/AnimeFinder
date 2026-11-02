@@ -16,10 +16,17 @@ export default function HamletSelfKnowledgeWorkspace() {
           <h2>Self-Knowledge</h2>
           <p>Explore your personal anime knowledge, preferences, rankings, characters, themes, keywords, and patterns.</p>
         </div>
-        <div className="hamlet-self-engine-status" aria-label="Hamlet AI Self-Knowledge Engine status">
-          <span className="hamlet-model-label">Hamlet AI Self-Knowledge Engine</span>
-          <strong>UI prepared</strong>
-          <small>Engine connection will be added in a later step.</small>
+
+        <div className="hamlet-self-header-side">
+          <div className="hamlet-self-conversation-actions" aria-label="Prepared Self-Knowledge conversation controls">
+            <button className="ghost-button" type="button" disabled title="Available when the Self-Knowledge Engine is connected">New Conversation</button>
+            <button className="ghost-button" type="button" disabled title="Available when the Self-Knowledge Engine is connected">Conversation History</button>
+          </div>
+          <div className="hamlet-self-engine-status" aria-label="Hamlet AI Self-Knowledge Engine status">
+            <span className="hamlet-model-label">Hamlet AI Self-Knowledge Engine</span>
+            <strong>UI prepared</strong>
+            <small>Engine connection will be added in a later step.</small>
+          </div>
         </div>
       </header>
 
