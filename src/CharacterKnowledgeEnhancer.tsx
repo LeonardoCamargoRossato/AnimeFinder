@@ -20,6 +20,19 @@ import {
   type PersonalCharacterLink,
 } from './characterKnowledge'
 import {
+  getCachedExternalSource,
+  getCachedExternalSources,
+  loadExternalSources,
+  saveExternalSource,
+  type CharacterExternalSource,
+} from './characterExternalSources'
+import { applyConfirmedCharacterCanonicalName } from './characterCanonicalName'
+import {
+  FandomProviderUnavailableError,
+  searchFandomCharacter,
+  type FandomCharacterResult,
+} from './FandomProvider'
+import {
   isCharacterProviderUnavailableError,
   type ExternalCharacterFull,
   type ExternalCharacterSummary,
@@ -34,47 +47,112 @@ function CharacterImage({ src, name, className = '' }: { src?: string | null; na
     : <span className={`character-avatar-placeholder ${className}`}>{name.slice(0, 2).toUpperCase()}</span>
 }
 
-function CharacterProfileModal({ work, character, link, onClose }: {
+function FandomSearchPanel({ work, character, onConfirmed, onClose }: {
   work: ManagedCatalogWork
   character: CharacterKnowledge
-  link: PersonalCharacterLink
+  onConfirmed: (source: CharacterExternalSource) => void
   onClose: () => void
+}) {
+  const [query, setQuery] = useState(character.name)
+  const [results, setResults] = useState<FandomCharacterResult[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState('')
+  const [error, setError] = useState('')
+
+  const search = useCallback(async () => {
+    if (!query.trim()) return
+    setLoading(true); setError('')
+    try {
+      setResults(await searchFandomCharacter(work.displayName, query))
+    } catch (reason) {
+      setError(reason instanceof FandomProviderUnavailableError
+        ? 'Fandom temporarily unavailable.'
+        : reason instanceof Error ? reason.message : 'Fandom search failed.')
+      setResults([])
+    } finally { setLoading(false) }
+  }, [query, work.displayName])
+
+  useEffect(() => { void search() }, [])
+
+  async function confirm(result: FandomCharacterResult) {
+    setSaving(result.externalId)
+    try {
+      const originalPersonalName = character.name
+      const source = await saveExternalSource({
+        personalWorkId: work.id,
+        personalCharacterId: character.id,
+        provider: 'fandom',
+        externalId: result.externalId,
+        canonicalName: result.canonicalName,
+        url: result.url,
+        imageUrl: result.imageUrl,
+        description: result.description,
+        wikiDomain: result.wikiDomain,
+        metadata: { originalPersonalName },
+        confirmed: true,
+      })
+      await applyConfirmedCharacterCanonicalName(work, character.id, result.canonicalName)
+      onConfirmed(source)
+    } finally { setSaving('') }
+  }
+
+  return <div className="fandom-search-panel">
+    <div className="fandom-search-heading"><div><span className="eyebrow">FANDOM SEARCH</span><strong>{work.displayName} Wiki / Fandom</strong></div><button type="button" onClick={onClose}>×</button></div>
+    <div className="character-search-row"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Fandom…" /><button className="ghost-button compact" type="button" disabled={loading || !query.trim()} onClick={() => void search()}>{loading ? 'Searching…' : 'Search Again'}</button></div>
+    {error && <div className="notice error compact-notice"><strong>⚠ {error}</strong><button className="ghost-button compact" type="button" onClick={() => void search()}>Retry</button></div>}
+    {!loading && !error && !results.length && <div className="character-search-empty">No reliable Fandom result found in the work wiki.</div>}
+    <div className="fandom-search-results">{results.map((result) => <article key={`${result.wikiDomain}-${result.externalId}`}>
+      <CharacterImage src={result.imageUrl} name={result.canonicalName} />
+      <div><span className="eyebrow">FANDOM MATCH</span><strong>{result.canonicalName}</strong><small>{result.wikiDomain}</small>{result.description && <p>{result.description}</p>}</div>
+      <button className="primary-button compact" type="button" disabled={Boolean(saving)} onClick={() => void confirm(result)}>{saving === result.externalId ? 'Saving…' : 'Confirm Fandom Match'}</button>
+    </article>)}</div>
+  </div>
+}
+
+function CharacterProfileModal({ work, character, link, onClose, onStartJikan }: {
+  work: ManagedCatalogWork
+  character: CharacterKnowledge
+  link: PersonalCharacterLink | null
+  onClose: () => void
+  onStartJikan: () => void
 }) {
   const navigate = useNavigate()
   const [external, setExternal] = useState<ExternalCharacterFull | null>(() => {
+    if (!link) return null
     const cached = getCachedExternalCharacter(link.providerCharacterId)
     return cached && 'animeAppearances' in cached ? cached as ExternalCharacterFull : null
   })
-  const [loading, setLoading] = useState(!external)
+  const [sources, setSources] = useState<CharacterExternalSource[]>(() => getCachedExternalSources(work.id, character.id))
+  const [loading, setLoading] = useState(Boolean(link) && !external)
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [aboutExpanded, setAboutExpanded] = useState(false)
+  const [fandomOpen, setFandomOpen] = useState(false)
 
   const loadExternal = useCallback(async (force = false) => {
-    setLoading(true)
-    setError('')
-    try {
-      const row = await loadExternalCharacter(link.providerCharacterId, force)
-      setExternal(row)
-    } catch (reason) {
+    if (!link) return
+    setLoading(true); setError('')
+    try { setExternal(await loadExternalCharacter(link.providerCharacterId, force)) }
+    catch (reason) {
       setError(isCharacterProviderUnavailableError(reason)
         ? 'Jikan temporarily unavailable. Cached Personal Knowledge is still available.'
         : reason instanceof Error ? reason.message : 'External character information is unavailable.')
-    } finally {
-      setLoading(false)
-    }
-  }, [link.providerCharacterId])
+    } finally { setLoading(false) }
+  }, [link?.providerCharacterId])
 
-  useEffect(() => { void loadExternal(false) }, [loadExternal])
+  useEffect(() => { if (link) void loadExternal(false) }, [loadExternal, link])
+  useEffect(() => { void loadExternalSources(work.id, character.id).then(setSources) }, [work.id, character.id])
 
   const comment = character.commentVersions.at(-1)?.content ?? ''
   const keywords = character.keywords.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank)
-  const cachedIdentity = getCachedExternalCharacter(link.providerCharacterId)
-  const image = external?.imageUrl ?? cachedIdentity?.imageUrl ?? link.imageUrl
-  const name = external?.canonicalName ?? cachedIdentity?.canonicalName ?? link.canonicalName ?? character.name
-  const role = link.role ?? external?.role ?? cachedIdentity?.role
-  const about = external?.about?.trim() ?? ''
-  const malUrl = external?.url ?? cachedIdentity?.url ?? `https://myanimelist.net/character/${link.providerCharacterId}`
+  const cachedIdentity = link ? getCachedExternalCharacter(link.providerCharacterId) : null
+  const fandom = sources.find((row) => row.provider === 'fandom' && row.confirmed) ?? getCachedExternalSource(work.id, character.id, 'fandom')
+  const jikanSource = sources.find((row) => row.provider === 'jikan' && row.confirmed) ?? null
+  const image = external?.imageUrl ?? cachedIdentity?.imageUrl ?? link?.imageUrl ?? fandom?.imageUrl
+  const name = external?.canonicalName ?? cachedIdentity?.canonicalName ?? link?.canonicalName ?? fandom?.canonicalName ?? character.name
+  const role = link?.role ?? external?.role ?? cachedIdentity?.role
+  const about = external?.about?.trim() ?? fandom?.description?.trim() ?? ''
+  const malUrl = external?.url ?? cachedIdentity?.url ?? link ? `https://myanimelist.net/character/${link?.providerCharacterId}` : jikanSource?.url
 
   return createPortal(<div className="character-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose() }}>
     <section className={expanded ? 'character-profile-modal expanded' : 'character-profile-modal'} role="dialog" aria-modal="true" aria-label={`${name} Character Profile`}>
@@ -98,18 +176,25 @@ function CharacterProfileModal({ work, character, link, onClose }: {
       </section>
 
       <section className="character-profile-section external-section">
-        <div className="character-profile-section-heading"><span className="eyebrow">CHARACTER INFORMATION</span><h3>Jikan / MyAnimeList</h3></div>
-        {loading && <div className="character-external-loading"><span className="spinner" /><strong>Loading external character information…</strong></div>}
+        <div className="character-profile-section-heading"><span className="eyebrow">CHARACTER INFORMATION</span><h3>External character information</h3></div>
+        {!link && <div className="character-provider-empty"><strong>No Jikan character linked.</strong><p>Your Personal Knowledge remains fully available.</p><div><button className="ghost-button compact" type="button" onClick={onStartJikan}>Search Jikan</button><button className="ghost-button compact" type="button" onClick={() => setFandomOpen(true)}>Try Fandom</button></div></div>}
+        {loading && <div className="character-external-loading"><span className="spinner" /><strong>Loading Jikan character information…</strong></div>}
         {error && <div className="notice error character-provider-error"><strong>⚠ {error}</strong><small>Your Personal Knowledge is unaffected.</small><button className="ghost-button compact" type="button" onClick={() => void loadExternal(true)}>Retry</button></div>}
         {external && <>
           <div className="character-external-facts"><div><span>Canonical name</span><strong>{external.canonicalName}</strong></div>{role && <div><span>Role</span><strong>{role}</strong></div>}<div><span>MAL Character ID</span><strong>{external.providerCharacterId}</strong></div>{external.alternativeNames.length > 0 && <div><span>Alternative names</span><strong>{external.alternativeNames.join(' · ')}</strong></div>}</div>
-          {about && <div className="character-about"><span>ABOUT</span><p className={aboutExpanded ? 'expanded' : ''}>{about}</p>{about.length > 420 && <button className="text-button" type="button" onClick={() => setAboutExpanded((value) => !value)}>{aboutExpanded ? 'Show less' : 'Show more'}</button>}</div>}
           {external.animeAppearances.length > 0 && <div className="character-appearances"><span>APPEARANCES</span><div>{external.animeAppearances.slice(0, aboutExpanded ? 30 : 10).map((appearance) => <button key={appearance.malId} type="button" onClick={() => { onClose(); navigate(`/app/anime/${appearance.malId}`) }}><strong>{appearance.title}</strong>{appearance.role && <small>{appearance.role}</small>}</button>)}</div></div>}
           {external.voiceActors.length > 0 && <div className="character-voice-actors"><span>VOICE ACTORS</span><div>{external.voiceActors.slice(0, 8).map((actor) => <div key={`${actor.malId}-${actor.language}`}><strong>{actor.name}</strong><small>{actor.language}</small></div>)}</div></div>}
         </>}
+        {about && <div className="character-about"><span>ABOUT</span><p className={aboutExpanded ? 'expanded' : ''}>{about}</p>{about.length > 420 && <button className="text-button" type="button" onClick={() => setAboutExpanded((value) => !value)}>{aboutExpanded ? 'Show less' : 'Show more'}</button>}</div>}
+        {fandomOpen && <FandomSearchPanel work={work} character={character} onClose={() => setFandomOpen(false)} onConfirmed={(source) => { setSources((current) => [...current.filter((row) => row.provider !== 'fandom'), source]); setFandomOpen(false) }} />}
       </section>
 
-      <footer className="character-profile-footer"><a className="ghost-button link-button" href={malUrl} target="_blank" rel="noreferrer">View on MyAnimeList ↗</a><button className="ghost-button" type="button" onClick={onClose}>Close</button></footer>
+      <section className="character-profile-section character-external-sources">
+        <div className="character-profile-section-heading"><span className="eyebrow">EXTERNAL SOURCES</span><h3>Open the original external references</h3></div>
+        <div className="character-external-source-buttons">{fandom?.url ? <a className="ghost-button link-button" href={fandom.url} target="_blank" rel="noreferrer">Fandom ↗</a> : <button className="ghost-button" type="button" onClick={() => setFandomOpen(true)}>Find on Fandom</button>}{malUrl && <a className="ghost-button link-button" href={malUrl} target="_blank" rel="noreferrer">MyAnimeList ↗</a>}</div>
+      </section>
+
+      <footer className="character-profile-footer"><button className="ghost-button" type="button" onClick={onClose}>Close</button></footer>
     </section>
   </div>, document.body)
 }
@@ -153,13 +238,7 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
   onChanged: () => void
   focusCharacterId?: string | null
 }) {
-  // Keep this array reference stable. Recreating it on every render used to recreate
-  // loadRoster(), retrigger its effect, flip loading again and create an infinite
-  // load/render loop where suggestions/photos briefly appeared and immediately vanished.
-  const personalCharacters = useMemo(
-    () => profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank),
-    [profile.characters],
-  )
+  const personalCharacters = useMemo(() => profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank), [profile.characters])
   const [roster, setRoster] = useState<ExternalCharacterSummary[]>([])
   const [links, setLinks] = useState<PersonalCharacterLink[]>(() => getCachedCharacterLinks(work.id))
   const [suggestions, setSuggestions] = useState<Map<string, CharacterMatchSuggestion>>(new Map())
@@ -167,36 +246,30 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
   const [error, setError] = useState('')
   const [providerUnavailable, setProviderUnavailable] = useState(false)
   const [manualId, setManualId] = useState<string | null>(focusCharacterId ?? null)
+  const [fandomId, setFandomId] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
 
   const loadRoster = useCallback(async (force = false) => {
     setLoading(true); setError(''); setProviderUnavailable(false)
     try {
-      const [characters, storedLinks] = await Promise.all([
-        loadWorkCharacterRoster(work, force),
-        loadCharacterLinks(work.id),
-      ])
+      const [characters, storedLinks] = await Promise.all([loadWorkCharacterRoster(work, force), loadCharacterLinks(work.id)])
       setRoster(characters); setLinks(storedLinks)
       setSuggestions(new Map(personalCharacters.map((character) => [character.id, suggestCharacterMatch(character.id, character.name, characters)])))
     } catch (reason) {
       setLinks(await loadCharacterLinks(work.id))
       const unavailable = isCharacterProviderUnavailableError(reason)
       setProviderUnavailable(unavailable)
-      setError(unavailable
-        ? 'Jikan temporarily unavailable. Cached characters remain usable; retry when the provider responds.'
-        : reason instanceof Error ? reason.message : 'Could not load the Personal Work character roster.')
-    } finally {
-      setLoading(false)
-    }
+      setError(unavailable ? 'Jikan temporarily unavailable. Cached characters remain usable; retry when the provider responds.' : reason instanceof Error ? reason.message : 'Could not load the Personal Work character roster.')
+    } finally { setLoading(false) }
   }, [work, personalCharacters])
 
   useEffect(() => { void loadRoster(false) }, [loadRoster])
-
   const linkMap = useMemo(() => new Map(links.map((row) => [row.personalCharacterId, row])), [links])
 
   async function confirm(character: CharacterKnowledge, candidate: ExternalCharacterSummary, manual = false, confidence?: number) {
     setSavingId(character.id)
     try {
+      const originalPersonalName = character.name
       const saved = await saveCharacterLink({
         personalWorkId: work.id,
         personalCharacterId: character.id,
@@ -208,6 +281,20 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
         linkState: manual ? 'manual' : 'linked',
         confidence: confidence ?? (manual ? 1 : null),
       })
+      await saveExternalSource({
+        personalWorkId: work.id,
+        personalCharacterId: character.id,
+        provider: 'jikan',
+        externalId: String(candidate.providerCharacterId),
+        canonicalName: candidate.canonicalName,
+        url: candidate.url ?? `https://myanimelist.net/character/${candidate.providerCharacterId}`,
+        imageUrl: candidate.imageUrl,
+        description: null,
+        wikiDomain: null,
+        metadata: { role: candidate.role ?? null, originalPersonalName },
+        confirmed: true,
+      })
+      await applyConfirmedCharacterCanonicalName(work, character.id, candidate.canonicalName)
       setLinks((current) => [...current.filter((row) => row.personalCharacterId !== character.id), saved])
       setManualId(null); onChanged()
     } finally { setSavingId(null) }
@@ -219,8 +306,8 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
   }
 
   return createPortal(<div className="character-modal-backdrop"><section className="character-link-modal" role="dialog" aria-modal="true" aria-label={`Link ${work.displayName} characters`}>
-    <header className="character-profile-header"><div><span className="eyebrow">LINK CHARACTERS</span><h2>{work.displayName}</h2><p>Cache first. Jikan suggestions are never confirmed silently, and your personal ranking/comments remain independent.</p></div><button className="character-profile-close" type="button" onClick={onClose}>×</button></header>
-    {loading && <div className="character-link-loading"><span className="spinner" /><strong>Loading cached characters and external roster…</strong></div>}
+    <header className="character-profile-header"><div><span className="eyebrow">LINK CHARACTERS</span><h2>{work.displayName}</h2><p>Jikan/MAL remains the primary provider. Fandom is an optional fallback and is searched only when you request it.</p></div><button className="character-profile-close" type="button" onClick={onClose}>×</button></header>
+    {loading && <div className="character-link-loading"><span className="spinner" /><strong>Loading cached characters and Jikan roster…</strong></div>}
     {error && <div className="notice error character-provider-error"><strong>{providerUnavailable ? '⚠ Jikan temporarily unavailable' : 'Could not load external character roster'}</strong><small>{error}</small><button className="ghost-button compact" type="button" disabled={loading} onClick={() => void loadRoster(true)}>Retry</button></div>}
     {!loading && <div className="character-link-list">{personalCharacters.map((character) => {
       const linked = linkMap.get(character.id)
@@ -228,11 +315,12 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
       const cachedExternal = linked ? getCachedExternalCharacter(linked.providerCharacterId) : null
       const candidate = linked ? ({ provider: 'jikan', providerCharacterId: linked.providerCharacterId, canonicalName: cachedExternal?.canonicalName ?? linked.canonicalName, imageUrl: cachedExternal?.imageUrl ?? linked.imageUrl, role: cachedExternal?.role ?? linked.role } as ExternalCharacterSummary) : suggestion?.candidate ?? null
       return <article key={character.id} className={linked ? 'character-link-row linked' : 'character-link-row'}>
-        <div className="character-link-personal"><span className="character-link-rank">#{character.rank}</span><strong>{character.name}</strong><small>{linked ? `${linked.linkState === 'manual' ? 'Manual link' : 'Linked'} ✓` : 'Personal Knowledge character'}</small></div>
+        <div className="character-link-personal"><span className="character-link-rank">#{character.rank}</span><strong>{linked?.canonicalName ?? character.name}</strong><small>{linked ? `${linked.linkState === 'manual' ? 'Manual Jikan link' : 'Jikan linked'} ✓` : 'Personal Knowledge character'}</small></div>
         <div className="character-link-arrow">→</div>
-        {candidate ? <div className="character-link-candidate"><CharacterImage src={candidate.imageUrl} name={candidate.canonicalName} /><div><strong>{candidate.canonicalName}</strong><small>{candidate.role ?? 'Role unavailable'} · MAL #{candidate.providerCharacterId}</small>{!linked && suggestion && <span>{Math.round(suggestion.confidence * 100)}% · {suggestion.reason}</span>}</div></div> : <div className="character-link-missing">{providerUnavailable ? 'External provider unavailable — not evaluated' : 'No reliable match found'}</div>}
-        <div className="character-link-actions">{linked ? <><button className="ghost-button compact" type="button" onClick={() => setManualId(character.id)}>Change</button><button className="text-button" type="button" disabled={savingId === character.id} onClick={() => void removeLink(character.id)}>Unlink</button></> : <>{candidate && <button className="primary-button compact" type="button" disabled={savingId === character.id} onClick={() => void confirm(character, candidate, false, suggestion?.confidence)}>{savingId === character.id ? 'Saving…' : 'Confirm match'}</button>}<button className="ghost-button compact" type="button" disabled={providerUnavailable && !roster.length} onClick={() => setManualId(character.id)}>Search manually</button></>}</div>
+        {candidate ? <div className="character-link-candidate"><CharacterImage src={candidate.imageUrl} name={candidate.canonicalName} /><div><strong>{candidate.canonicalName}</strong><small>{candidate.role ?? 'Role unavailable'} · MAL #{candidate.providerCharacterId}</small>{!linked && suggestion && <span>{Math.round(suggestion.confidence * 100)}% · {suggestion.reason}</span>}</div></div> : <div className="character-link-missing">{providerUnavailable ? 'Jikan unavailable — not evaluated' : 'No reliable Jikan match found'}</div>}
+        <div className="character-link-actions">{linked ? <><button className="ghost-button compact" type="button" onClick={() => setManualId(character.id)}>Change</button><button className="text-button" type="button" disabled={savingId === character.id} onClick={() => void removeLink(character.id)}>Unlink</button></> : <>{candidate && <button className="primary-button compact" type="button" disabled={savingId === character.id} onClick={() => void confirm(character, candidate, false, suggestion?.confidence)}>{savingId === character.id ? 'Saving…' : 'Confirm match'}</button>}<button className="ghost-button compact" type="button" onClick={() => setManualId(character.id)}>Search manually</button>{!candidate && <button className="ghost-button compact fandom-button" type="button" onClick={() => setFandomId(character.id)}>Try Fandom</button>}</>}</div>
         {manualId === character.id && <ManualCharacterSearch work={work} personalName={character.name} roster={roster} onChoose={(row, manual) => void confirm(character, row, manual)} onClose={() => setManualId(null)} />}
+        {fandomId === character.id && <FandomSearchPanel work={work} character={character} onClose={() => setFandomId(null)} onConfirmed={() => { setFandomId(null); onChanged() }} />}
       </article>
     })}</div>}
     <footer className="character-profile-footer"><small>{links.length}/{personalCharacters.length} personal characters linked with Jikan/MAL</small><button className="ghost-button" type="button" onClick={onClose}>Close</button></footer>
@@ -240,34 +328,44 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
 }
 
 function CharacterCards({ work, profile }: { work: ManagedCatalogWork; profile: PersonalKnowledge }) {
-  const characters = useMemo(
-    () => profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank),
-    [profile.characters],
-  )
+  const characters = useMemo(() => profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank), [profile.characters])
   const [links, setLinks] = useState<PersonalCharacterLink[]>(() => getCachedCharacterLinks(work.id))
+  const [sources, setSources] = useState<CharacterExternalSource[]>(() => getCachedExternalSources(work.id))
   const [linkOpen, setLinkOpen] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [profileCharacter, setProfileCharacter] = useState<CharacterKnowledge | null>(null)
 
-  async function refresh() { setLinks(await loadCharacterLinks(work.id)) }
-  useEffect(() => { void refresh() }, [work.id])
+  const refresh = useCallback(async () => {
+    const [nextLinks, nextSources] = await Promise.all([loadCharacterLinks(work.id), loadExternalSources(work.id)])
+    setLinks(nextLinks); setSources(nextSources)
+  }, [work.id])
+  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    const onUpdate = () => void refresh()
+    window.addEventListener('animefinder:character-external-sources-updated', onUpdate)
+    return () => window.removeEventListener('animefinder:character-external-sources-updated', onUpdate)
+  }, [refresh])
+
   const linkMap = useMemo(() => new Map(links.map((row) => [row.personalCharacterId, row])), [links])
+  const fandomMap = useMemo(() => new Map(sources.filter((row) => row.provider === 'fandom').map((row) => [row.personalCharacterId, row])), [sources])
 
   if (!characters.length) return <div className="character-cards-empty">No confirmed characters yet.</div>
   return <>
     <div className="character-cards-toolbar"><small>{links.length}/{characters.length} linked with Jikan/MAL</small><button className="ghost-button compact" type="button" onClick={() => { setFocusId(null); setLinkOpen(true) }}>🔗 Link Characters</button></div>
     <div className="favorite-character-cards">{characters.map((character) => {
-      const link = linkMap.get(character.id)
+      const link = linkMap.get(character.id) ?? null
+      const fandom = fandomMap.get(character.id)
       const cachedExternal = link ? getCachedExternalCharacter(link.providerCharacterId) : null
-      const imageUrl = cachedExternal?.imageUrl ?? link?.imageUrl
-      const displayName = cachedExternal?.canonicalName ?? link?.canonicalName ?? character.name
-      return <button type="button" className={link ? 'favorite-character-card linked' : 'favorite-character-card'} key={character.id} onClick={() => link ? setProfileCharacter(character) : (setFocusId(character.id), setLinkOpen(true))}>
-        <div className="favorite-character-image"><CharacterImage src={imageUrl} name={displayName} />{!link && <span className="character-unlinked-badge">Link</span>}</div>
-        <div><span>#{character.rank}</span><strong>{displayName}</strong><small>{link ? link.role ?? cachedExternal?.role ?? 'Jikan linked' : 'Character not linked'}</small></div>
+      const imageUrl = cachedExternal?.imageUrl ?? link?.imageUrl ?? fandom?.imageUrl
+      const displayName = cachedExternal?.canonicalName ?? link?.canonicalName ?? fandom?.canonicalName ?? character.name
+      const status = [link ? 'Jikan ✓' : '', fandom ? 'Fandom ✓' : ''].filter(Boolean).join(' · ')
+      return <button type="button" className={link || fandom ? 'favorite-character-card linked' : 'favorite-character-card'} key={character.id} onClick={() => setProfileCharacter(character)}>
+        <div className="favorite-character-image"><CharacterImage src={imageUrl} name={displayName} /></div>
+        <div><span>#{character.rank}</span><strong>{displayName}</strong><small>{status || 'Personal Knowledge only'}</small></div>
       </button>
     })}</div>
     {linkOpen && <LinkCharactersModal work={work} profile={profile} focusCharacterId={focusId} onClose={() => setLinkOpen(false)} onChanged={() => void refresh()} />}
-    {profileCharacter && linkMap.get(profileCharacter.id) && <CharacterProfileModal work={work} character={profileCharacter} link={linkMap.get(profileCharacter.id)!} onClose={() => setProfileCharacter(null)} />}
+    {profileCharacter && <CharacterProfileModal work={work} character={profileCharacter} link={linkMap.get(profileCharacter.id) ?? null} onClose={() => setProfileCharacter(null)} onStartJikan={() => { setProfileCharacter(null); setFocusId(profileCharacter.id); setLinkOpen(true) }} />}
   </>
 }
 
@@ -276,14 +374,21 @@ function DetailsCharacterKnowledge({ host, malId }: { host: HTMLElement; malId: 
   const [profile, setProfile] = useState<PersonalKnowledge | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let live = true
+  const refresh = useCallback(async () => {
     if (!work) { setLoading(false); return }
-    void loadPersonalKnowledge(work.id, malId)
-      .then((row) => { if (live) setProfile(row) })
-      .finally(() => { if (live) setLoading(false) })
-    return () => { live = false }
-  }, [work?.id, malId])
+    setProfile(await loadPersonalKnowledge(work.id, malId))
+    setLoading(false)
+  }, [work, malId])
+
+  useEffect(() => { let live = true; void refresh().catch(() => { if (live) setLoading(false) }); return () => { live = false } }, [refresh])
+  useEffect(() => {
+    const onUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ workId?: string }>).detail
+      if (!detail?.workId || detail.workId === work?.id) void refresh()
+    }
+    window.addEventListener('animefinder:personal-knowledge-updated', onUpdate)
+    return () => window.removeEventListener('animefinder:personal-knowledge-updated', onUpdate)
+  }, [refresh, work?.id])
 
   return createPortal(<div className="character-knowledge-cards-host">{loading ? <div className="character-cards-loading"><span className="spinner" /> Loading favorite characters…</div> : work && profile ? <CharacterCards work={work} profile={profile} /> : <div className="character-cards-empty">Character knowledge unavailable.</div>}</div>, host)
 }
@@ -325,12 +430,11 @@ export default function CharacterKnowledgeEnhancer() {
       if (!work) return
       if (workspaceWork?.id !== work.id) {
         setWorkspaceWork(work)
-        const profile = await loadPersonalKnowledge(work.id, work.primaryMalId)
-        setWorkspaceProfile(profile)
+        setWorkspaceProfile(await loadPersonalKnowledge(work.id, work.primaryMalId))
       }
       if (!editor.querySelector('.character-link-workspace-button')) {
         const button = document.createElement('button')
-        button.type = 'button'; button.className = 'ghost-button character-link-workspace-button'; button.textContent = '🔗 Link Characters with Jikan'
+        button.type = 'button'; button.className = 'ghost-button character-link-workspace-button'; button.textContent = '🔗 Link Characters'
         button.addEventListener('click', () => setWorkspaceLinkOpen(true)); editor.appendChild(button)
       }
 
