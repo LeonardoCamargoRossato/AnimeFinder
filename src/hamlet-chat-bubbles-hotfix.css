@@ -1,0 +1,138 @@
+/* Hamlet AI visual hotfix: WhatsApp-style conversation bubbles only.
+   No AI, persistence, history, recommendation, or catalog logic is changed. */
+
+.hamlet-messages {
+  padding-left: 24px;
+  padding-right: 24px;
+  gap: 15px;
+}
+
+.hamlet-message {
+  width: fit-content;
+  max-width: 82%;
+  position: relative;
+  gap: 4px;
+}
+
+.hamlet-message.assistant {
+  align-self: flex-start;
+  justify-items: start;
+}
+
+.hamlet-message.user {
+  align-self: flex-end;
+  justify-items: end;
+}
+
+.hamlet-message > span {
+  padding: 0 5px;
+}
+
+.hamlet-message.user > span,
+.hamlet-message.user > small {
+  text-align: right;
+}
+
+.hamlet-message p {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 54px;
+  padding: 11px 14px;
+  border-radius: 17px;
+  line-height: 1.5;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, .08);
+}
+
+/* Hamlet: left-aligned, softer surface based on the existing AI-assisted UI. */
+.hamlet-message.assistant p {
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 5px 17px 17px 17px;
+  background: color-mix(in srgb, var(--surface) 84%, var(--accent) 16%);
+  color: var(--text);
+}
+
+.hamlet-message.assistant p::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 8px;
+  width: 0;
+  height: 0;
+  border-top: 0 solid transparent;
+  border-bottom: 10px solid transparent;
+  border-right: 10px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+
+.hamlet-message.assistant p::after {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 9px;
+  width: 0;
+  height: 0;
+  border-top: 0 solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 8px solid color-mix(in srgb, var(--surface) 84%, var(--accent) 16%);
+}
+
+/* User: right-aligned, stronger AnimeFinder accent bubble. */
+.hamlet-message.user p {
+  border: 1px solid color-mix(in srgb, var(--accent) 78%, #351f76 22%);
+  border-radius: 17px 5px 17px 17px;
+  background: color-mix(in srgb, var(--accent) 86%, #351f76 14%);
+  color: #fff;
+}
+
+.hamlet-message.user p::before {
+  content: '';
+  position: absolute;
+  right: -9px;
+  top: 8px;
+  width: 0;
+  height: 0;
+  border-top: 0 solid transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 10px solid color-mix(in srgb, var(--accent) 78%, #351f76 22%);
+}
+
+.hamlet-message.user p::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: 9px;
+  width: 0;
+  height: 0;
+  border-top: 0 solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 8px solid color-mix(in srgb, var(--accent) 86%, #351f76 14%);
+}
+
+.hamlet-message.assistant > small {
+  padding-left: 6px;
+}
+
+.hamlet-message.user > small {
+  padding-right: 6px;
+}
+
+/* Thinking bubble keeps Hamlet's left-hand visual language. */
+.hamlet-message.assistant.thinking p {
+  color: var(--muted);
+}
+
+@media (max-width: 680px) {
+  .hamlet-messages {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .hamlet-message {
+    max-width: 91%;
+  }
+
+  .hamlet-message p {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
