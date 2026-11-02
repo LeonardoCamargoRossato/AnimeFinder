@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import HamletAIWorkspace from './HamletAIWorkspace'
+import './hamlet-viewport-hotfix.css'
 
 type DiscoverMode = 'search' | 'hamlet'
 
@@ -49,6 +50,22 @@ export default function HamletAIEnhancer() {
       document.querySelector('.discover-page')?.classList.remove('hamlet-mode-active')
     }
   }, [location.pathname, mode])
+
+  useEffect(() => {
+    if (mode !== 'hamlet' || !workspaceHost) return
+    let focusFrame = 0
+    const viewportFrame = window.requestAnimationFrame(() => {
+      workspaceHost.scrollIntoView({ block: 'start', behavior: 'auto' })
+      focusFrame = window.requestAnimationFrame(() => {
+        const composer = workspaceHost.querySelector<HTMLTextAreaElement>('.hamlet-composer textarea')
+        composer?.focus({ preventScroll: true })
+      })
+    })
+    return () => {
+      window.cancelAnimationFrame(viewportFrame)
+      if (focusFrame) window.cancelAnimationFrame(focusFrame)
+    }
+  }, [mode, workspaceHost])
 
   if (location.pathname !== '/app') return null
   return <>
