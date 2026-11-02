@@ -1,8 +1,16 @@
-import { GoogleGenAI } from 'npm:@google/genai'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const ALLOWED_EMAIL = 'leo.c.rossato@gmail.com'
-const DEFAULT_MODEL = 'gemini-3.8-flash'
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite'
+const SUPPORTED_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.8-flash',
+] as const
+const MODEL_TIMEOUT_MS = 10_000
+const REQUEST_BUDGET_MS = 38_000
+const GEMINI_INTERACTIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 
 const INTENT_SCHEMA = {
   type: 'object',
@@ -43,6 +51,17 @@ Default excludeWatched=true unless the user explicitly wants already-watched tit
 The query field is a short human-readable summary of the current intent; it is NOT a list of anime titles.
 Reply in the language used by the user. Be helpful, curious when clarification improves results, knowledgeable, and not overly verbose.`
 
+type SupportedModel = typeof SUPPORTED_MODELS[number]
+
+class HamletAttemptError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly transient: boolean,
+    readonly code: string,
+  ) { super(message) }
+}
+
 function corsHeaders(origin: string | null) {
   const allowed = origin === 'https://leonardocamargorossato.github.io' || origin?.startsWith('http://localhost:') || origin?.startsWith('http://127.0.0.1:')
   return {
@@ -57,13 +76,18 @@ function json(body: unknown, status: number, origin: string | null) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' } })
 }
 
-function extractOutputText(interaction: any): string {
+function extractOutputText(payload: any): string {
+  const interaction = payload?.interaction ?? payload
   if (typeof interaction?.output_text === 'string') return interaction.output_text
   if (typeof interaction?.outputText === 'string') return interaction.outputText
   const steps = Array.isArray(interaction?.steps) ? interaction.steps : []
   for (let index = steps.length - 1; index >= 0; index -= 1) {
     const step = steps[index]
     if (typeof step?.text === 'string') return step.text
+    if (Array.isArray(step?.content)) {
+      const joined = step.content.map((part: any) => typeof part?.text === 'string' ? part.text : '').filter(Boolean).join('')
+      if (joined) return joined
+    }
     const content = step?.content
     if (typeof content?.text === 'string') return content.text
     const parts = Array.isArray(content?.parts) ? content.parts : []
@@ -71,6 +95,95 @@ function extractOutputText(interaction: any): string {
     if (joined) return joined
   }
   return ''
+}
+
+function isSupportedModel(value: unknown): value is SupportedModel {
+  return typeof value === 'string' && (SUPPORTED_MODELS as readonly string[]).includes(value)
+}
+
+function fallbackOrder(preferred: SupportedModel): SupportedModel[] {
+  return [preferred, ...SUPPORTED_MODELS.filter((model) => model !== preferred)]
+}
+
+function providerErrorText(value: unknown) {
+  if (!value || typeof value !== 'object') return ''
+  const row = value as Record<string, any>
+  return String(row?.error?.message ?? row?.message ?? '').slice(0, 300)
+}
+
+function isTransientStatus(status: number, providerMessage = '') {
+  if ([408, 429, 500, 502, 503, 504].includes(status)) return true
+  if (status === 404 && /model|temporar|unavailable|not found/i.test(providerMessage)) return true
+  return false
+}
+
+async function callGeminiModel(apiKey: string, model: SupportedModel, input: string, timeoutMs: number) {
+  const started = Date.now()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    let response: Response
+    try {
+      response = await fetch(GEMINI_INTERACTIONS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model,
+          system_instruction: SYSTEM_INSTRUCTION,
+          input,
+          response_format: {
+            type: 'text',
+            mime_type: 'application/json',
+            schema: INTENT_SCHEMA,
+          },
+        }),
+      })
+    } catch (error) {
+      const durationMs = Date.now() - started
+      if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+        console.info('Hamlet model attempt:', { model, status: 'timeout', durationMs })
+        throw new HamletAttemptError('Model attempt timed out.', 504, true, 'MODEL_TIMEOUT')
+      }
+      console.info('Hamlet model attempt:', { model, status: 'network_error', durationMs })
+      throw new HamletAttemptError('Temporary Gemini network failure.', 503, true, 'MODEL_NETWORK_ERROR')
+    }
+
+    let payload: any = null
+    try { payload = await response.json() } catch { payload = null }
+    const durationMs = Date.now() - started
+
+    if (!response.ok) {
+      const message = providerErrorText(payload)
+      console.info('Hamlet model attempt:', { model, status: response.status, durationMs })
+      throw new HamletAttemptError(
+        'Gemini model request failed.',
+        response.status,
+        isTransientStatus(response.status, message),
+        response.status === 429 ? 'MODEL_RATE_LIMIT' : 'MODEL_PROVIDER_ERROR',
+      )
+    }
+
+    console.info('Hamlet model attempt:', { model, status: 200, durationMs })
+    const output = extractOutputText(payload)
+    if (!output) throw new HamletAttemptError('Gemini returned no structured Hamlet output.', 502, false, 'INVALID_MODEL_OUTPUT')
+
+    let parsed: any
+    try { parsed = JSON.parse(output) }
+    catch { throw new HamletAttemptError('Gemini returned invalid structured output.', 502, false, 'INVALID_MODEL_OUTPUT') }
+
+    const actualModel = typeof payload?.model === 'string'
+      ? payload.model
+      : typeof payload?.interaction?.model === 'string'
+        ? payload.interaction.model
+        : model
+    return { parsed, actualModel, durationMs }
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 Deno.serve(async (request) => {
@@ -96,39 +209,57 @@ Deno.serve(async (request) => {
 
   const apiKey = Deno.env.get('GEMINI_API_KEY')
   if (!apiKey) return json({ error: 'Hamlet is not configured yet. GEMINI_API_KEY is missing on the secure server.', code: 'HAMLET_NOT_CONFIGURED' }, 503, origin)
-  const model = Deno.env.get('HAMLET_GEMINI_MODEL') || DEFAULT_MODEL
 
   let body: any
   try { body = await request.json() } catch { return json({ error: 'Invalid JSON body.' }, 400, origin) }
   const message = typeof body?.message === 'string' ? body.message.trim().slice(0, 2000) : ''
   if (!message) return json({ error: 'Message is required.' }, 400, origin)
+  if (body?.preferredModel != null && !isSupportedModel(body.preferredModel)) return json({ error: 'Unsupported Hamlet model selection.' }, 400, origin)
+
+  const preferredModel: SupportedModel = isSupportedModel(body?.preferredModel) ? body.preferredModel : DEFAULT_MODEL
   const conversation = Array.isArray(body?.conversation) ? body.conversation.slice(-10).map((item: any) => ({ role: item?.role === 'assistant' ? 'assistant' : 'user', content: String(item?.content ?? '').slice(0, 2000) })) : []
   const currentIntent = body?.currentIntent && typeof body.currentIntent === 'object' ? body.currentIntent : {}
-
   const input = `CURRENT INTENT:\n${JSON.stringify(currentIntent)}\n\nRECENT CONVERSATION:\n${conversation.map((item: any) => `${item.role.toUpperCase()}: ${item.content}`).join('\n')}\n\nLATEST USER MESSAGE:\n${message}\n\nReturn Hamlet's conversational reply plus the complete updated structured intent.`
 
-  try {
-    const ai = new GoogleGenAI({ apiKey })
-    const interaction = await ai.interactions.create({
-      model,
-      system_instruction: SYSTEM_INSTRUCTION,
-      input,
-      response_format: {
-        type: 'text',
-        mime_type: 'application/json',
-        schema: INTENT_SCHEMA,
-      },
-    } as any)
-    const output = extractOutputText(interaction)
-    if (!output) return json({ error: 'Gemini returned no structured Hamlet output.' }, 502, origin)
-    let parsed: any
-    try { parsed = JSON.parse(output) } catch { return json({ error: 'Gemini returned invalid structured output.' }, 502, origin) }
-    return json({ ...parsed, provider: 'gemini', model }, 200, origin)
-  } catch (error) {
-    const messageText = error instanceof Error ? error.message : String(error)
-    const lower = messageText.toLowerCase()
-    const status = lower.includes('429') || lower.includes('quota') || lower.includes('resource_exhausted') ? 429 : lower.includes('timeout') ? 504 : 502
-    console.error('Hamlet Gemini provider failed.', { status, model, error: messageText.slice(0, 400) })
-    return json({ error: status === 429 ? 'Hamlet reached the current Gemini quota. Please try again later.' : 'Hamlet is temporarily unavailable. Please try again.', code: status === 429 ? 'HAMLET_RATE_LIMIT' : 'HAMLET_PROVIDER_ERROR' }, status, origin)
+  const requestStarted = Date.now()
+  const attemptedModels: string[] = []
+  let lastTransientStatus = 503
+
+  for (const model of fallbackOrder(preferredModel)) {
+    const elapsed = Date.now() - requestStarted
+    const remaining = REQUEST_BUDGET_MS - elapsed
+    if (remaining < 2_000) break
+    attemptedModels.push(model)
+    if (model !== preferredModel) console.info('Hamlet fallback:', { model })
+
+    try {
+      const result = await callGeminiModel(apiKey, model, input, Math.min(MODEL_TIMEOUT_MS, remaining))
+      console.info('Hamlet success:', { model: result.actualModel, durationMs: result.durationMs })
+      return json({
+        ...result.parsed,
+        provider: 'gemini',
+        model: result.actualModel,
+        preferredModel,
+        fallbackUsed: result.actualModel !== preferredModel || model !== preferredModel,
+      }, 200, origin)
+    } catch (error) {
+      if (!(error instanceof HamletAttemptError)) {
+        console.error('Hamlet provider application failure.', { model })
+        return json({ error: 'Hamlet is temporarily unavailable. Please try again.', code: 'HAMLET_PROVIDER_ERROR' }, 502, origin)
+      }
+      lastTransientStatus = error.status
+      if (!error.transient) {
+        console.error('Hamlet non-transient provider failure.', { model, status: error.status, code: error.code })
+        return json({ error: 'Hamlet is temporarily unavailable. Please try again.', code: error.code }, error.status >= 400 && error.status < 500 ? error.status : 502, origin)
+      }
+    }
   }
+
+  console.warn('Hamlet all models unavailable.', { attemptedModels, durationMs: Date.now() - requestStarted })
+  return json({
+    error: 'Hamlet is temporarily unavailable. Please try again.',
+    code: 'HAMLET_ALL_MODELS_UNAVAILABLE',
+    provider: 'gemini',
+    attemptedModels,
+  }, lastTransientStatus === 429 ? 429 : 503, origin)
 })
