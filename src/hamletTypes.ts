@@ -7,6 +7,7 @@ export interface HamletMessage {
   role: HamletRole
   content: string
   createdAt: string
+  modelUsed?: string
 }
 
 export interface HamletSearchIntent {
@@ -22,11 +23,24 @@ export interface HamletSearchIntent {
   clarificationQuestion: string | null
 }
 
+export interface HamletConversationMetadataContext {
+  title?: string | null
+  description?: string | null
+  titleSource?: 'pending' | 'ai' | 'user'
+}
+
+export interface HamletGeneratedConversationMetadata {
+  ready: boolean
+  title: string | null
+  description: string | null
+}
+
 export interface HamletProviderRequest {
   message: string
   conversation: Array<Pick<HamletMessage, 'role' | 'content'>>
   currentIntent: HamletSearchIntent
   preferredModel?: string
+  conversationMetadata?: HamletConversationMetadataContext
 }
 
 export interface HamletProviderResponse {
@@ -36,6 +50,7 @@ export interface HamletProviderResponse {
   model?: string
   preferredModel?: string
   fallbackUsed?: boolean
+  conversationMetadata?: HamletGeneratedConversationMetadata
 }
 
 export interface HamletRecommendation {
@@ -43,6 +58,7 @@ export interface HamletRecommendation {
   whyMatches: string
   matchedCriteria: string[]
   watched: boolean
+  catalogAction?: 'watched' | 'needs_classification' | null
 }
 
 export const emptyHamletIntent: HamletSearchIntent = {
