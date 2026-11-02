@@ -153,7 +153,13 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
   onChanged: () => void
   focusCharacterId?: string | null
 }) {
-  const personalCharacters = profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank)
+  // Keep this array reference stable. Recreating it on every render used to recreate
+  // loadRoster(), retrigger its effect, flip loading again and create an infinite
+  // load/render loop where suggestions/photos briefly appeared and immediately vanished.
+  const personalCharacters = useMemo(
+    () => profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank),
+    [profile.characters],
+  )
   const [roster, setRoster] = useState<ExternalCharacterSummary[]>([])
   const [links, setLinks] = useState<PersonalCharacterLink[]>(() => getCachedCharacterLinks(work.id))
   const [suggestions, setSuggestions] = useState<Map<string, CharacterMatchSuggestion>>(new Map())
@@ -173,7 +179,6 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
       setRoster(characters); setLinks(storedLinks)
       setSuggestions(new Map(personalCharacters.map((character) => [character.id, suggestCharacterMatch(character.id, character.name, characters)])))
     } catch (reason) {
-      // Links are independent from the provider and should still hydrate when external metadata fails.
       setLinks(await loadCharacterLinks(work.id))
       const unavailable = isCharacterProviderUnavailableError(reason)
       setProviderUnavailable(unavailable)
@@ -235,7 +240,10 @@ function LinkCharactersModal({ work, profile, onClose, onChanged, focusCharacter
 }
 
 function CharacterCards({ work, profile }: { work: ManagedCatalogWork; profile: PersonalKnowledge }) {
-  const characters = profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank)
+  const characters = useMemo(
+    () => profile.characters.filter((row) => row.confirmed).sort((a, b) => a.rank - b.rank),
+    [profile.characters],
+  )
   const [links, setLinks] = useState<PersonalCharacterLink[]>(() => getCachedCharacterLinks(work.id))
   const [linkOpen, setLinkOpen] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
