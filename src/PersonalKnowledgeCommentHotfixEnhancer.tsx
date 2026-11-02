@@ -1,12 +1,41 @@
 import { useEffect } from 'react'
+import { loadPersonalKnowledge } from './aiPersonalKnowledge'
+import { findManagedWorkByMalId } from './personalCatalogManager'
 
 const nativeTextareaSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+const TIMESTAMP_CLASS = 'chat-message-timestamp'
+const knowledgeTimes = new Map<string, Map<number, string>>()
+let knowledgeLoadingKey = ''
 
 function setTextareaValue(target: HTMLTextAreaElement, value: string) {
   if (nativeTextareaSetter) nativeTextareaSetter.call(target, value)
   else target.value = value
   target.dispatchEvent(new Event('input', { bubbles: true }))
   target.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+function formatTimestamp(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).replace(',', ' ·')
+}
+
+function stampHost(host: HTMLElement | null, createdAt: string) {
+  if (!host) return
+  let stamp = host.querySelector<HTMLElement>(`:scope > .${TIMESTAMP_CLASS}`)
+  if (!stamp) {
+    stamp = document.createElement('small')
+    stamp.className = TIMESTAMP_CLASS
+    host.append(stamp)
+  }
+  stamp.dataset.createdAt = createdAt
+  stamp.textContent = formatTimestamp(createdAt)
 }
 
 function findWorkChat(): HTMLElement | null {
@@ -17,9 +46,94 @@ function findLatestUserBubble(chat: HTMLElement) {
   return chat.querySelector<HTMLElement>('.pk-message.user .pk-user-bubble')
 }
 
+function privacyNode(chat: HTMLElement) {
+  return chat.querySelector<HTMLElement>(':scope > .pk-privacy')
+}
+
+function existingReplyContainers(chat: HTMLElement) {
+  return Array.from(chat.querySelectorAll<HTMLElement>(':scope > .pk-conversation-replies'))
+}
+
+function replyContainer(chat: HTMLElement) {
+  let container = chat.querySelector<HTMLElement>(':scope > .pk-conversation-replies[data-pk-reply-tail="true"]')
+  if (container) return container
+
+  const existing = existingReplyContainers(chat)
+  if (existing.length) {
+    container = existing.at(-1) ?? null
+    if (container) {
+      container.dataset.pkReplyTail = 'true'
+      return container
+    }
+  }
+
+  container = document.createElement('div')
+  container.className = 'pk-conversation-replies'
+  container.dataset.pkReplyTail = 'true'
+  chat.insertBefore(container, privacyNode(chat) ?? null)
+  return container
+}
+
+function rotateReplyTail(chat: HTMLElement) {
+  existingReplyContainers(chat).forEach((container) => delete container.dataset.pkReplyTail)
+  const container = document.createElement('div')
+  container.className = 'pk-conversation-replies'
+  container.dataset.pkReplyTail = 'true'
+  chat.insertBefore(container, privacyNode(chat) ?? null)
+  return container
+}
+
+function moveEditBlockBeforeTail(chat: HTMLElement, tail: HTMLElement) {
+  const userMessage = chat.querySelector<HTMLElement>(':scope > .pk-message.user')
+  const versionNav = chat.querySelector<HTMLElement>(':scope > .pk-version-nav')
+  const compose = chat.querySelector<HTMLElement>(':scope > .pk-compose-actions')
+  const warning = chat.querySelector<HTMLElement>(':scope > .pk-inline-warning')
+  ;[userMessage, versionNav, compose, warning].forEach((node) => {
+    if (node) chat.insertBefore(node, tail)
+  })
+}
+
+function beginEditingTimeline(chat: HTMLElement) {
+  const oldTail = replyContainer(chat)
+  const anchor = privacyNode(chat)
+  const userMessage = chat.querySelector<HTMLElement>(':scope > .pk-message.user')
+  const versionNav = chat.querySelector<HTMLElement>(':scope > .pk-version-nav')
+  const compose = chat.querySelector<HTMLElement>(':scope > .pk-compose-actions')
+  const warning = chat.querySelector<HTMLElement>(':scope > .pk-inline-warning')
+
+  ;[userMessage, versionNav, compose, warning].forEach((node) => {
+    if (node) chat.insertBefore(node, anchor ?? null)
+  })
+
+  const newTail = rotateReplyTail(chat)
+  moveEditBlockBeforeTail(chat, newTail)
+  chat.dataset.pkEditingTimeline = 'true'
+  oldTail.dataset.pkReplyHistory = 'true'
+  window.requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight })
+}
+
+function syncEditingTimeline(chat: HTMLElement) {
+  const editing = Boolean(chat.querySelector('.pk-message.user .pk-user-bubble textarea'))
+  const wasEditing = chat.dataset.pkEditingTimeline === 'true'
+
+  if (editing && !wasEditing) {
+    beginEditingTimeline(chat)
+    return
+  }
+
+  if (editing) {
+    const tail = replyContainer(chat)
+    moveEditBlockBeforeTail(chat, tail)
+    return
+  }
+
+  if (wasEditing) chat.dataset.pkEditingTimeline = 'false'
+}
+
 function waitForChatEditor(chat: HTMLElement, callback: (textarea: HTMLTextAreaElement) => void, attempts = 0) {
   const textarea = chat.querySelector<HTMLTextAreaElement>('.pk-message.user .pk-user-bubble textarea')
   if (textarea) {
+    syncEditingTimeline(chat)
     callback(textarea)
     return
   }
@@ -45,6 +159,7 @@ function openLatestCommentEditor(chat: HTMLElement, callback?: (textarea: HTMLTe
 
   const existing = chat.querySelector<HTMLTextAreaElement>('.pk-message.user .pk-user-bubble textarea')
   if (existing) {
+    syncEditingTimeline(chat)
     callback?.(existing)
     existing.focus()
     return
@@ -59,16 +174,6 @@ function openLatestCommentEditor(chat: HTMLElement, callback?: (textarea: HTMLTe
   })
 }
 
-function replyContainer(chat: HTMLElement) {
-  let container = chat.querySelector<HTMLElement>(':scope > .pk-conversation-replies')
-  if (container) return container
-  container = document.createElement('div')
-  container.className = 'pk-conversation-replies'
-  const privacy = chat.querySelector(':scope > .pk-privacy')
-  chat.insertBefore(container, privacy ?? null)
-  return container
-}
-
 function appendConversationReply(chat: HTMLElement, text: string) {
   const normalized = text.trim()
   if (!normalized) return
@@ -76,8 +181,10 @@ function appendConversationReply(chat: HTMLElement, text: string) {
   const last = container.lastElementChild?.querySelector('p')?.textContent?.trim()
   if (last === normalized) return
 
+  const createdAt = new Date().toISOString()
   const message = document.createElement('div')
   message.className = 'pk-message assistant pk-conversation-reply'
+  message.dataset.pkCreatedAt = createdAt
   const avatar = document.createElement('span')
   avatar.className = 'pk-avatar'
   avatar.textContent = 'AI'
@@ -85,8 +192,10 @@ function appendConversationReply(chat: HTMLElement, text: string) {
   const paragraph = document.createElement('p')
   paragraph.textContent = normalized
   body.append(paragraph)
+  stampHost(body, createdAt)
   message.append(avatar, body)
   container.append(message)
+  window.requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight })
 }
 
 function enhanceConversationThread(chat: HTMLElement) {
@@ -97,16 +206,20 @@ function enhanceConversationThread(chat: HTMLElement) {
     if (!dynamic) return
 
     const initial = dynamic.querySelector('p')?.textContent?.trim() ?? ''
+    const createdAt = new Date().toISOString()
     dynamic.dataset.pkDynamicAssistant = 'true'
     dynamic.dataset.pkLastAssistant = initial
+    dynamic.dataset.pkCreatedAt = createdAt
 
     const intro = dynamic.cloneNode(true) as HTMLElement
     intro.classList.add('pk-thread-intro')
     intro.removeAttribute('data-pk-dynamic-assistant')
     intro.removeAttribute('data-pk-last-assistant')
-    intro.querySelectorAll('.pk-thinking, .pk-bubble-toggle').forEach((node) => node.remove())
+    intro.dataset.pkCreatedAt = createdAt
+    intro.querySelectorAll('.pk-thinking, .pk-bubble-toggle, .chat-message-timestamp').forEach((node) => node.remove())
     const introParagraph = intro.querySelector('p')
     if (introParagraph) introParagraph.textContent = initial
+    stampHost(intro.querySelector<HTMLElement>(':scope > div'), createdAt)
     dynamic.before(intro)
     dynamic.classList.add('pk-dynamic-assistant-hidden')
   }
@@ -116,6 +229,63 @@ function enhanceConversationThread(chat: HTMLElement) {
   if (current && current !== previous) {
     dynamic.dataset.pkLastAssistant = current
     appendConversationReply(chat, current)
+  }
+}
+
+function stampAssistantMessages(chat: HTMLElement) {
+  chat.querySelectorAll<HTMLElement>('.pk-message.assistant:not(.pk-dynamic-assistant-hidden)').forEach((message) => {
+    const body = message.querySelector<HTMLElement>(':scope > div')
+    if (!body || body.querySelector(`:scope > .${TIMESTAMP_CLASS}`)) return
+    const createdAt = message.dataset.pkCreatedAt || new Date().toISOString()
+    message.dataset.pkCreatedAt = createdAt
+    stampHost(body, createdAt)
+  })
+}
+
+function currentMalId() {
+  const match = window.location.hash.match(/\/app\/anime\/(\d+)/)
+  return match ? Number(match[1]) : null
+}
+
+function currentUserVersion(chat: HTMLElement) {
+  const label = chat.querySelector<HTMLElement>('.pk-message.user .pk-user-bubble > small:not(.chat-message-timestamp)')?.textContent ?? ''
+  const match = label.match(/V(\d+)/i)
+  return match ? Number(match[1]) : null
+}
+
+async function refreshUserTimestamp(chat: HTMLElement) {
+  const bubble = findLatestUserBubble(chat)
+  if (!bubble) return
+  const version = currentUserVersion(chat)
+  if (version == null) {
+    if (!bubble.querySelector(`:scope > .${TIMESTAMP_CLASS}`)) stampHost(bubble, new Date().toISOString())
+    return
+  }
+
+  const malId = currentMalId()
+  const work = malId == null ? null : findManagedWorkByMalId(malId)
+  if (!work) return
+
+  const cached = knowledgeTimes.get(work.id)?.get(version)
+  if (cached) {
+    stampHost(bubble, cached)
+    return
+  }
+
+  const requestKey = `${work.id}:v${version}`
+  if (knowledgeLoadingKey === requestKey) return
+  knowledgeLoadingKey = requestKey
+  try {
+    const fallback = bubble.querySelector('p')?.textContent ?? bubble.querySelector('textarea')?.value ?? ''
+    const profile = await loadPersonalKnowledge(work.id, work.primaryMalId, fallback)
+    const times = new Map(profile.versions.map((row) => [row.versionNumber, row.createdAt]))
+    knowledgeTimes.set(work.id, times)
+    const createdAt = times.get(version)
+    if (createdAt && document.body.contains(bubble)) stampHost(bubble, createdAt)
+  } catch {
+    if (!bubble.querySelector(`:scope > .${TIMESTAMP_CLASS}`)) stampHost(bubble, new Date().toISOString())
+  } finally {
+    if (knowledgeLoadingKey === requestKey) knowledgeLoadingKey = ''
   }
 }
 
@@ -153,8 +323,8 @@ function enhanceContextActions(chat: HTMLElement) {
     button.addEventListener('click', (event) => {
       event.preventDefault()
       event.stopPropagation()
-      openLatestCommentEditor(chat)
       appendConversationReply(chat, 'Current comment opened for editing. Save it to create a new version.')
+      openLatestCommentEditor(chat)
     })
   })
 }
@@ -257,9 +427,12 @@ function enhanceWorkspace() {
   const chat = findWorkChat()
   if (!chat) return
   enhanceConversationThread(chat)
+  syncEditingTimeline(chat)
   enhanceVersionEdit(chat)
   enhanceContextActions(chat)
   enhanceCurrentCommentCard(chat)
+  stampAssistantMessages(chat)
+  void refreshUserTimestamp(chat)
 }
 
 export default function PersonalKnowledgeCommentHotfixEnhancer() {
