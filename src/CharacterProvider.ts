@@ -44,6 +44,19 @@ export interface CharacterProvider {
   searchCharacter(query: string): Promise<ExternalCharacterSummary[]>
 }
 
+export class CharacterProviderUnavailableError extends Error {
+  readonly code = 'CHARACTER_PROVIDER_UNAVAILABLE'
+  constructor(message = 'Jikan is temporarily unavailable.') {
+    super(message)
+    this.name = 'CharacterProviderUnavailableError'
+  }
+}
+
+export function isCharacterProviderUnavailableError(error: unknown): error is CharacterProviderUnavailableError {
+  return error instanceof CharacterProviderUnavailableError
+    || (error instanceof Error && /temporarily unavailable|timed out|network|failed to fetch/i.test(error.message))
+}
+
 type JikanImage = { jpg?: { image_url?: string | null; large_image_url?: string | null } }
 type JikanCharacterListPayload = {
   data: Array<{
@@ -81,7 +94,60 @@ type JikanCharacterSearchPayload = {
   }>
 }
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+type Transport = {
+  id: 'proxy' | 'tenrai' | 'jikan'
+  buildUrl: (path: string) => string
+}
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+const CHARACTER_PROXY_URL = (import.meta.env.VITE_CHARACTER_PROXY_URL as string | undefined)?.trim()
+
+function transports(): Transport[] {
+  const rows: Transport[] = []
+  if (CHARACTER_PROXY_URL) {
+    rows.push({
+      id: 'proxy',
+      buildUrl: (path) => `${CHARACTER_PROXY_URL}${CHARACTER_PROXY_URL.includes('?') ? '&' : '?'}path=${encodeURIComponent(path)}`,
+    })
+  }
+  // AnimeFinder already uses this Jikan-compatible MAL transport for the main catalogue.
+  // It is preferred in-browser so a temporary api.jikan.moe network path problem does not block the UI.
+  rows.push({ id: 'tenrai', buildUrl: (path) => `https://api.tenrai.org/v1${path}` })
+  rows.push({ id: 'jikan', buildUrl: (path) => `https://api.jikan.moe/v4${path}` })
+  return rows
+}
+
+async function fetchJson<T>(transport: Transport, path: string, attempt = 0): Promise<T> {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 7000)
+  try {
+    const response = await fetch(transport.buildUrl(path), {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    })
+    if (response.status === 429 && attempt < 1) {
+      const retryAfter = Number(response.headers.get('Retry-After'))
+      await wait(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 2500) : 900)
+      return fetchJson<T>(transport, path, attempt + 1)
+    }
+    if (response.status >= 500 && attempt < 1) {
+      await wait(700)
+      return fetchJson<T>(transport, path, attempt + 1)
+    }
+    if (!response.ok) throw new Error(`${transport.id} returned HTTP ${response.status}`)
+    return response.json() as Promise<T>
+  } catch (error) {
+    const transient = error instanceof TypeError || (error instanceof DOMException && error.name === 'AbortError')
+    if (transient && attempt < 1) {
+      await wait(650)
+      return fetchJson<T>(transport, path, attempt + 1)
+    }
+    if (error instanceof DOMException && error.name === 'AbortError') throw new Error(`${transport.id} timed out`)
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
 
 class JikanCharacterProvider implements CharacterProvider {
   readonly id = 'jikan' as const
@@ -89,34 +155,18 @@ class JikanCharacterProvider implements CharacterProvider {
   private characterCache = new Map<number, Promise<ExternalCharacterFull>>()
   private searchCache = new Map<string, Promise<ExternalCharacterSummary[]>>()
 
-  constructor(private readonly baseUrl = 'https://api.jikan.moe/v4') {}
-
-  private async request<T>(path: string, attempt = 0): Promise<T> {
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 9000)
-    try {
-      const response = await fetch(`${this.baseUrl}${path}`, { signal: controller.signal, headers: { Accept: 'application/json' } })
-      if (response.status === 429 && attempt < 2) {
-        const retryAfter = Number(response.headers.get('Retry-After'))
-        await wait(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 900 * (attempt + 1))
-        return this.request<T>(path, attempt + 1)
+  private async request<T>(path: string): Promise<T> {
+    const errors: string[] = []
+    for (const transport of transports()) {
+      try {
+        return await fetchJson<T>(transport, path)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        errors.push(`${transport.id}: ${message}`)
+        if (import.meta.env.DEV) console.warn(`AnimeFinder CharacterProvider ${transport.id} failed for ${path}`, error)
       }
-      if (response.status >= 500 && attempt < 1) {
-        await wait(700)
-        return this.request<T>(path, attempt + 1)
-      }
-      if (!response.ok) throw new Error(`Jikan character provider error (${response.status})`)
-      return response.json() as Promise<T>
-    } catch (error) {
-      if (attempt < 1 && (error instanceof TypeError || (error instanceof DOMException && error.name === 'AbortError'))) {
-        await wait(700)
-        return this.request<T>(path, attempt + 1)
-      }
-      if (error instanceof DOMException && error.name === 'AbortError') throw new Error('Jikan character request timed out.')
-      throw error
-    } finally {
-      window.clearTimeout(timeout)
     }
+    throw new CharacterProviderUnavailableError(`Jikan is temporarily unavailable. ${errors.join(' · ')}`)
   }
 
   getAnimeCharacters(animeMalId: number) {
