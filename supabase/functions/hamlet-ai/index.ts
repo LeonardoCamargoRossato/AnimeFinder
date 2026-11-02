@@ -34,13 +34,23 @@ const INTENT_SCHEMA = {
       },
       required: ['intent', 'readyToSearch', 'query', 'genres', 'themes', 'concepts', 'avoidGenres', 'avoidConcepts', 'excludeWatched', 'clarificationQuestion'],
     },
+    conversationMetadata: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ready: { type: 'boolean' },
+        title: { type: ['string', 'null'] },
+        description: { type: ['string', 'null'] },
+      },
+      required: ['ready', 'title', 'description'],
+    },
   },
-  required: ['reply', 'intent'],
+  required: ['reply', 'intent', 'conversationMetadata'],
 }
 
 const SYSTEM_INSTRUCTION = `You are Hamlet, AnimeFinder's concise conversational anime-discovery assistant.
 Hamlet is the product identity; never call yourself Gemini.
-Your job in V1 is ONLY to understand the user's discovery intent, clarify ambiguity, explain anime concepts when asked, and return structured search criteria.
+Your job is ONLY to understand the user's discovery intent, clarify ambiguity, explain anime concepts when asked, and return structured search criteria.
 Do NOT invent or recommend specific anime titles. Real anime results come from AnimeFinder's catalog provider after your response.
 Maintain and update the prior intent across turns rather than restarting it.
 Ask one short clarification question when the request is materially ambiguous. If enough criteria exist, set readyToSearch=true and clarificationQuestion=null.
@@ -49,7 +59,17 @@ Put softer semantic ideas such as levels, skills, classes, tactical battles, par
 Put negative metadata categories in avoidGenres and softer exclusions in avoidConcepts.
 Default excludeWatched=true unless the user explicitly wants already-watched titles included.
 The query field is a short human-readable summary of the current intent; it is NOT a list of anime titles.
-Reply in the language used by the user. Be helpful, curious when clarification improves results, knowledgeable, and not overly verbose.`
+Reply in the language used by the user. Be helpful, curious when clarification improves results, knowledgeable, and not overly verbose.
+
+CONVERSATION METADATA RULES:
+You also return conversationMetadata without making any extra AI call. The frontend may persist it as a future Personal Knowledge source.
+- Keep title concise, ideally 3–7 words.
+- Keep description concise, ideally one sentence.
+- If CURRENT CONVERSATION METADATA says titleSource=user, never propose replacement metadata: return ready=false and null title/description.
+- If there is not enough context to identify the search meaning, return ready=false and null title/description.
+- If metadata is pending and the intent is now meaningful, return ready=true with a useful title and description.
+- If metadata was AI-generated already, only return ready=true when the search meaning materially changed enough that the old metadata is misleading; otherwise return ready=false.
+Do not produce huge summaries.`
 
 type SupportedModel = typeof SUPPORTED_MODELS[number]
 
@@ -219,7 +239,15 @@ Deno.serve(async (request) => {
   const preferredModel: SupportedModel = isSupportedModel(body?.preferredModel) ? body.preferredModel : DEFAULT_MODEL
   const conversation = Array.isArray(body?.conversation) ? body.conversation.slice(-10).map((item: any) => ({ role: item?.role === 'assistant' ? 'assistant' : 'user', content: String(item?.content ?? '').slice(0, 2000) })) : []
   const currentIntent = body?.currentIntent && typeof body.currentIntent === 'object' ? body.currentIntent : {}
-  const input = `CURRENT INTENT:\n${JSON.stringify(currentIntent)}\n\nRECENT CONVERSATION:\n${conversation.map((item: any) => `${item.role.toUpperCase()}: ${item.content}`).join('\n')}\n\nLATEST USER MESSAGE:\n${message}\n\nReturn Hamlet's conversational reply plus the complete updated structured intent.`
+  const currentConversationMetadata = body?.conversationMetadata && typeof body.conversationMetadata === 'object'
+    ? {
+        title: typeof body.conversationMetadata.title === 'string' ? body.conversationMetadata.title.slice(0, 120) : null,
+        description: typeof body.conversationMetadata.description === 'string' ? body.conversationMetadata.description.slice(0, 360) : null,
+        titleSource: ['pending','ai','user'].includes(body.conversationMetadata.titleSource) ? body.conversationMetadata.titleSource : 'pending',
+      }
+    : { title: null, description: null, titleSource: 'pending' }
+
+  const input = `CURRENT INTENT:\n${JSON.stringify(currentIntent)}\n\nCURRENT CONVERSATION METADATA:\n${JSON.stringify(currentConversationMetadata)}\n\nRECENT CONVERSATION:\n${conversation.map((item: any) => `${item.role.toUpperCase()}: ${item.content}`).join('\n')}\n\nLATEST USER MESSAGE:\n${message}\n\nReturn Hamlet's conversational reply, the complete updated structured intent, and conversationMetadata according to the metadata rules.`
 
   const requestStarted = Date.now()
   const attemptedModels: string[] = []
