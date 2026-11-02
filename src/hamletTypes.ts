@@ -26,6 +26,7 @@ export interface HamletProviderRequest {
   message: string
   conversation: Array<Pick<HamletMessage, 'role' | 'content'>>
   currentIntent: HamletSearchIntent
+  preferredModel?: string
 }
 
 export interface HamletProviderResponse {
@@ -33,6 +34,8 @@ export interface HamletProviderResponse {
   intent: HamletSearchIntent
   provider: string
   model?: string
+  preferredModel?: string
+  fallbackUsed?: boolean
 }
 
 export interface HamletRecommendation {
