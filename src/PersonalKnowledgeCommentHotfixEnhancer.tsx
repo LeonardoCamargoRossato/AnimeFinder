@@ -23,11 +23,18 @@ function waitForChatEditor(chat: HTMLElement, callback: (textarea: HTMLTextAreaE
     callback(textarea)
     return
   }
-  if (attempts >= 10) return
+  if (attempts >= 12) return
   window.requestAnimationFrame(() => waitForChatEditor(chat, callback, attempts + 1))
 }
 
 function openLatestCommentEditor(chat: HTMLElement, callback?: (textarea: HTMLTextAreaElement) => void) {
+  const backToWork = chat.querySelector<HTMLButtonElement>('.pk-back')
+  if (backToWork) {
+    backToWork.click()
+    window.requestAnimationFrame(() => openLatestCommentEditor(chat, callback))
+    return
+  }
+
   const versionNav = chat.querySelector<HTMLElement>('.pk-version-nav')
   const rightArrow = Array.from(versionNav?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === '→')
   if (rightArrow && !rightArrow.disabled) {
@@ -85,7 +92,8 @@ function appendConversationReply(chat: HTMLElement, text: string) {
 function enhanceConversationThread(chat: HTMLElement) {
   let dynamic = chat.querySelector<HTMLElement>(':scope > .pk-message.assistant[data-pk-dynamic-assistant="true"]')
   if (!dynamic) {
-    dynamic = Array.from(chat.children).find((child) => child instanceof HTMLElement && child.classList.contains('pk-message') && child.classList.contains('assistant') && !child.classList.contains('pk-thread-intro') && !child.classList.contains('pk-conversation-reply')) as HTMLElement | undefined ?? null
+    const candidate = Array.from(chat.children).find((child) => child instanceof HTMLElement && child.classList.contains('pk-message') && child.classList.contains('assistant') && !child.classList.contains('pk-thread-intro') && !child.classList.contains('pk-conversation-reply'))
+    dynamic = candidate instanceof HTMLElement ? candidate : null
     if (!dynamic) return
 
     const initial = dynamic.querySelector('p')?.textContent?.trim() ?? ''
@@ -132,8 +140,13 @@ function enhanceVersionEdit(chat: HTMLElement) {
 }
 
 function enhanceContextActions(chat: HTMLElement) {
-  chat.querySelectorAll<HTMLButtonElement>('.pk-context-actions button').forEach((button) => {
-    if (!button.textContent?.includes('Organize text with AI')) return
+  chat.querySelectorAll<HTMLElement>('.pk-context-actions').forEach((actions) => {
+    const buttons = Array.from(actions.querySelectorAll<HTMLButtonElement>('button'))
+    const workActions = buttons.some((button) => button.textContent?.includes('Identify characters'))
+    if (!workActions) return
+
+    const button = buttons.find((candidate) => candidate.textContent?.includes('Organize text with AI'))
+    if (!button) return
     button.textContent = '✏️ Edit current comment'
     if (button.dataset.pkEditActionBound === 'true') return
     button.dataset.pkEditActionBound = 'true'
