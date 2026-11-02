@@ -1,0 +1,39 @@
+.hamlet-dual-mode-selector-host{margin:8px 0 0}
+.hamlet-dual-mode-selector{display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid color-mix(in srgb,var(--accent) 34%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--surface) 91%,var(--accent) 9%);box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.hamlet-dual-mode-selector button{border:0;border-radius:9px;padding:7px 11px;background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:850;cursor:pointer;transition:.18s ease}
+.hamlet-dual-mode-selector button:hover{color:var(--text);background:color-mix(in srgb,var(--surface) 80%,var(--accent) 20%)}
+.hamlet-dual-mode-selector button.active{color:#fff;background:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 76%,#fff 24%),0 0 18px color-mix(in srgb,var(--accent) 42%,transparent)}
+
+.hamlet-context-launcher-host{display:flex;justify-content:flex-end;margin:0 0 14px}
+.hamlet-context-launcher{display:inline-flex;align-items:center;gap:8px;border:1px solid color-mix(in srgb,var(--accent) 58%,var(--border));border-radius:11px;padding:9px 14px;background:color-mix(in srgb,var(--surface) 88%,var(--accent) 12%);color:var(--text);font:inherit;font-weight:850;cursor:pointer;box-shadow:0 0 18px color-mix(in srgb,var(--accent) 18%,transparent)}
+.hamlet-context-launcher.active,.hamlet-context-launcher:hover{background:var(--accent);color:#fff;box-shadow:0 0 22px color-mix(in srgb,var(--accent) 38%,transparent)}
+.hamlet-context-workspace-host{margin:0 0 24px}
+
+.hamlet-self-knowledge-workspace .hamlet-header{align-items:flex-start}
+.hamlet-self-engine-status{min-width:250px;display:grid;gap:4px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--surface) 94%,var(--accent) 6%)}
+.hamlet-self-engine-status strong{font-size:13px;color:var(--text)}
+.hamlet-self-engine-status small{font-size:10px;color:var(--muted);line-height:1.35}
+.hamlet-self-conversation-only{display:block}
+.hamlet-self-conversation-only .hamlet-conversation-panel{width:100%;min-width:0;border-right:0}
+.hamlet-self-messages{min-height:52vh;max-height:64vh}
+.hamlet-self-engine-note{padding:8px 12px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);background:color-mix(in srgb,var(--surface) 96%,var(--accent) 4%)}
+.hamlet-self-knowledge-workspace .hamlet-composer textarea{min-height:66px}
+
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hero>.eyebrow,
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hero>h1,
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hero>p,
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hero>.search-bar,
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active>.filters-panel,
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active>.results-section{display:none!important}
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hero{margin-bottom:4px}
+.discover-page.hamlet-mode-active.hamlet-self-knowledge-active .hamlet-workspace-host{margin-top:4px}
+
+@media(max-width:760px){
+  .hamlet-dual-mode-selector{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .hamlet-dual-mode-selector button{min-height:42px;padding:7px 8px}
+  .hamlet-context-launcher-host{justify-content:stretch}
+  .hamlet-context-launcher{width:100%;justify-content:center;min-height:44px}
+  .hamlet-self-knowledge-workspace .hamlet-header{display:grid;gap:12px}
+  .hamlet-self-engine-status{min-width:0;width:auto}
+  .hamlet-self-messages{min-height:48vh;max-height:58vh}
+}
