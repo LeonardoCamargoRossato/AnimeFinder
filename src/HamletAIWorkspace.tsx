@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { hamletAIProvider } from './GeminiProvider'
 import { removeWatched, saveWatched, watchedFromAnime } from './catalog'
 import { searchHamletAnime } from './hamletSearchService'
+import { DEFAULT_HAMLET_GEMINI_MODEL, HAMLET_GEMINI_MODELS, HAMLET_PROVIDER_OPTIONS, hamletModelLabel } from './hamletModels'
 import { emptyHamletIntent, type HamletMessage, type HamletRecommendation, type HamletSearchIntent } from './hamletTypes'
 
 const now = () => new Date().toISOString()
@@ -41,6 +42,47 @@ function intentChips(intent: HamletSearchIntent) {
   ]
 }
 
+function HamletModelSelector({
+  displayedModel,
+  preferredModel,
+  fallbackUsed,
+  onSelect,
+}: {
+  displayedModel: string
+  preferredModel: string
+  fallbackUsed: boolean
+  onSelect: (model: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [view, setView] = useState<'providers' | 'gemini'>('providers')
+
+  function close() { setOpen(false); setView('providers') }
+
+  return <div className="hamlet-model-control">
+    <span className="hamlet-model-label">Model</span>
+    <button className="hamlet-model-button" onClick={() => { setOpen((value) => !value); setView('providers') }} aria-expanded={open}>
+      <span>{hamletModelLabel(displayedModel)}</span><b>⌄</b>
+    </button>
+    {fallbackUsed && <small className="hamlet-fallback-note" title="Fallback model — preferred model temporarily unavailable.">Fallback model</small>}
+    {displayedModel !== preferredModel && <small className="hamlet-preferred-note">Preferred: {hamletModelLabel(preferredModel)}</small>}
+    {open && <div className="hamlet-model-popover" role="dialog" aria-label="Hamlet model selector">
+      {view === 'providers' ? <>
+        <div className="hamlet-model-popover-title">AI Provider</div>
+        {HAMLET_PROVIDER_OPTIONS.map((provider) => provider.available
+          ? <button key={provider.id} className="hamlet-provider-option available" onClick={() => setView('gemini')}><span>{provider.label}</span><small>Available</small><b>›</b></button>
+          : <div key={provider.id} className="hamlet-provider-disabled" data-tooltip="Provider not available yet."><button className="hamlet-provider-option" disabled><span>{provider.label}</span><small>Unavailable</small></button></div>)}
+      </> : <>
+        <button className="hamlet-model-back" onClick={() => setView('providers')}>← Providers</button>
+        <div className="hamlet-model-popover-title">Gemini models</div>
+        {HAMLET_GEMINI_MODELS.map((model) => <button key={model.id} className={`hamlet-model-option ${preferredModel === model.id ? 'preferred' : ''}`} onClick={() => { onSelect(model.id); close() }}>
+          <span>{model.label}</span>
+          <small>{preferredModel === model.id ? 'Preferred' : 'Use as preferred'}</small>
+        </button>)}
+      </>}
+    </div>}
+  </div>
+}
+
 export default function HamletAIWorkspace() {
   const [messages, setMessages] = useState<HamletMessage[]>(() => [intro()])
   const [intent, setIntent] = useState<HamletSearchIntent>(emptyHamletIntent)
@@ -49,7 +91,11 @@ export default function HamletAIWorkspace() {
   const [thinking, setThinking] = useState(false)
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState('')
+  const [preferredModel, setPreferredModel] = useState(DEFAULT_HAMLET_GEMINI_MODEL)
+  const [lastSuccessfulModel, setLastSuccessfulModel] = useState<string | null>(null)
+  const [fallbackUsed, setFallbackUsed] = useState(false)
   const chips = useMemo(() => intentChips(intent), [intent])
+  const displayedModel = lastSuccessfulModel ?? preferredModel
 
   async function runSearch(nextIntent: HamletSearchIntent) {
     if (!nextIntent.readyToSearch) { setRecommendations([]); return }
@@ -64,16 +110,20 @@ export default function HamletAIWorkspace() {
     const message = draft.trim()
     if (!message || thinking) return
     const userMessage = makeMessage('user', message)
-    const priorConversation = messages.map(({ role, content }) => ({ role, content }))
-    setMessages((current) => [...current, userMessage]); setDraft(''); setThinking(true); setError('')
+    const conversation = [...messages, userMessage]
+    setMessages(conversation); setDraft(''); setThinking(true); setError('')
     try {
       const response = await hamletAIProvider.sendMessage({
         message,
-        conversation: priorConversation,
+        conversation: messages.map(({ role, content }) => ({ role, content })),
         currentIntent: intent,
+        preferredModel,
       })
       setMessages((current) => [...current, makeMessage('assistant', response.reply)])
       setIntent(response.intent)
+      const actualModel = response.model ?? preferredModel
+      setLastSuccessfulModel(actualModel)
+      setFallbackUsed(response.fallbackUsed === true || actualModel !== preferredModel)
       await runSearch(response.intent)
     } catch (reason) {
       const messageText = reason instanceof Error ? reason.message : 'Hamlet is temporarily unavailable. Please try again.'
@@ -104,13 +154,22 @@ export default function HamletAIWorkspace() {
   }
 
   function clearConversation() {
-    setMessages([intro()]); setIntent(emptyHamletIntent); setRecommendations([]); setDraft(''); setError('')
+    setMessages([intro()]); setIntent(emptyHamletIntent); setRecommendations([]); setDraft(''); setError(''); setLastSuccessfulModel(null); setFallbackUsed(false)
+  }
+
+  function selectPreferredModel(model: string) {
+    setPreferredModel(model)
+    setLastSuccessfulModel(null)
+    setFallbackUsed(false)
   }
 
   return <section className="hamlet-workspace" aria-label="Hamlet AI conversational anime discovery">
     <header className="hamlet-header">
       <div><span className="eyebrow">✨ HAMLET AI</span><h2>Conversational Anime Discovery</h2><p>Describe what you want. Hamlet interprets the request; AnimeFinder finds the real catalog results.</p></div>
-      <button className="ghost-button" onClick={clearConversation}>Clear Conversation</button>
+      <div className="hamlet-header-actions">
+        <button className="ghost-button" onClick={clearConversation}>Clear Conversation</button>
+        <HamletModelSelector displayedModel={displayedModel} preferredModel={preferredModel} fallbackUsed={fallbackUsed} onSelect={selectPreferredModel} />
+      </div>
     </header>
     <div className="hamlet-intent-bar">
       <span className="hamlet-intent-label">Hamlet understood</span>
