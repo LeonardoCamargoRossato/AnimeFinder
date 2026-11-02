@@ -1,0 +1,708 @@
+ANIMEFINDER — HAMLET AI V1.2
+PERSISTENT CONVERSATIONS + COMPACT RECOMMENDATIONS + WATCHED FLOW + PDF EXPORT
+
+Repository:
+LeonardoCamargoRossato/AnimeFinder
+
+IMPORTANT:
+This is an incremental upgrade of the current working AnimeFinder + Hamlet AI.
+
+DO NOT rebuild Hamlet.
+DO NOT replace the current Gemini reliability/fallback architecture.
+DO NOT break the existing Supabase authentication, catalog, Personal Knowledge,
+Master Data, Jikan integration or GitHub Pages deployment.
+
+The current Hamlet AI conversation and recommendation flow is already working.
+
+The goal of V1.2 is to improve UX and introduce automatically persistent
+conversation history that can later become another Personal Knowledge source
+for Hamlet.
+
+==================================================
+1. COMPACT RECOMMENDATION CARDS
+==================================================
+
+The recommendation cards shown beside the Hamlet conversation are currently too large.
+
+Redesign them to be significantly more compact and easier to scan.
+
+The user should be able to see several recommendations at the same time without
+excessive scrolling.
+
+Keep the existing AnimeFinder visual identity.
+
+Each compact recommendation card should prioritize:
+
+- poster
+- title
+- score
+- year
+- episodes / format when available
+- essential metadata
+- quick actions
+
+Do not create giant poster cards.
+
+Prefer a compact grid/list optimized for browsing.
+
+Desktop should display multiple recommendation cards simultaneously.
+
+Responsive behavior must remain good on mobile.
+
+==================================================
+2. WATCHED / CLASSIFICATION ACTION FROM HAMLET
+==================================================
+
+Every recommendation should provide a quick action similar to:
+
+Mark as Watched
+
+When clicked, do NOT immediately finalize the operation.
+
+Open a small dialog/popover asking:
+
+"How should this anime be added?"
+
+Options:
+
+1. Already classified
+2. Needs classification
+3. Cancel
+
+If the user chooses:
+
+Already classified
+
+follow the existing AnimeFinder classification/watch flow.
+
+If the user chooses:
+
+Needs classification
+
+mark/import the anime appropriately and place it in the existing:
+
+Needs Classification
+
+workflow/list/category.
+
+This is especially important when Hamlet recommends an anime the user has
+already watched but which is not correctly represented in the personal catalog.
+
+The update must persist in Supabase.
+
+Supabase remains the source of truth.
+
+Do NOT use localStorage as persistent storage.
+
+After marking an anime as watched, update the Hamlet recommendation UI immediately.
+
+==================================================
+3. NEVER LOSE THE ACTIVE CONVERSATION
+==================================================
+
+Currently, if the user opens an anime recommendation and later returns to
+Hamlet AI, the conversation can disappear.
+
+Fix this.
+
+Navigating inside AnimeFinder must NOT destroy the active Hamlet conversation.
+
+The conversation must survive navigation between:
+
+- Hamlet
+- Anime Details
+- Personal Catalog
+- other AnimeFinder screens
+- browser refresh
+
+When returning to Hamlet, restore the conversation exactly where the user stopped.
+
+==================================================
+4. AUTOMATIC CONVERSATION PERSISTENCE
+==================================================
+
+IMPORTANT CHANGE:
+
+There must NOT be a manual "Save Conversation" requirement.
+
+Every Hamlet conversation must be automatically persisted in Supabase.
+
+As soon as a real conversation begins, create/reuse an active conversation
+record.
+
+Messages should then be persisted automatically as the conversation evolves.
+
+The user should never have to remember to save a conversation.
+
+Avoid creating duplicate conversations on every message.
+
+Maintain one active conversation ID throughout the session/search.
+
+Supabase is the source of truth.
+
+==================================================
+5. AUTOMATIC AI TITLE AND DESCRIPTION
+==================================================
+
+Hamlet should automatically generate metadata for each conversation.
+
+Generate:
+
+- short conversation title
+- short description
+
+Example:
+
+Title:
+RPG and Game-World Anime
+
+Description:
+Search for RPG-style anime with levels, classes, skills and virtual worlds.
+
+Another example:
+
+Title:
+Dark Fantasy Recommendations
+
+Description:
+Search for darker fantasy anime with mature themes and strong world-building.
+
+Keep both concise.
+
+Do NOT generate huge summaries.
+
+The automatic title/description should be generated after there is enough
+conversation context to understand the search.
+
+Do not call the AI after every single message just to regenerate metadata.
+
+Generate/update intelligently when useful.
+
+Store these values in Supabase.
+
+==================================================
+6. CONVERSATION DATABASE
+==================================================
+
+Introduce persistent Hamlet conversation storage following the existing
+AnimeFinder schema conventions.
+
+Suggested conceptual structure:
+
+hamlet_conversations
+
+- id
+- user_id
+- title
+- description
+- title_source
+- created_at
+- updated_at
+- last_accessed_at
+- access_count
+- preferred_provider
+- preferred_model
+- last_model_used
+- status
+- metadata
+
+hamlet_messages
+
+- id
+- conversation_id
+- role
+- content
+- created_at
+- model_used
+- metadata
+
+hamlet_recommendations
+
+- id
+- conversation_id
+- mal_id / anime identifier
+- created_at
+- metadata when necessary
+
+Adapt names/types to the existing AnimeFinder database architecture.
+
+Do NOT duplicate complete anime catalog records unnecessarily.
+
+Reference existing anime identifiers/data whenever possible.
+
+Apply RLS.
+
+Only the authenticated AnimeFinder user can access his own conversation data.
+
+==================================================
+7. CONVERSATION HISTORY
+==================================================
+
+The main persistent conversation control should be:
+
+Conversation History
+
+There should NOT be a separate Save Conversation button.
+
+Open a clean history view/list.
+
+Each conversation should show:
+
+Title
+Short description
+Created date
+Last accessed date
+Access count
+
+Example:
+
+RPG and Game-World Anime
+
+Search for RPG-style anime with levels, classes and virtual worlds.
+
+Created:
+Nov 2, 2026
+
+Last accessed:
+Nov 4, 2026
+
+Opened:
+3 times
+
+Sort primarily by:
+
+last_accessed_at DESC
+
+==================================================
+8. EDIT CONVERSATION METADATA
+==================================================
+
+Each item in Conversation History must have a small Edit action/icon.
+
+Example:
+
+✎ Edit
+
+Clicking Edit opens a compact dialog allowing the user to manually edit:
+
+- Conversation title
+- Conversation description
+
+Pre-fill the fields with the AI-generated title and description.
+
+The user can then improve/rename them.
+
+Example:
+
+AI generated:
+
+Title:
+RPG and Game-World Anime
+
+User changes it to:
+
+Best RPG / Isekai Anime Search
+
+Allow Save and Cancel.
+
+Persist the edited metadata in Supabase.
+
+Once manually edited, do NOT automatically overwrite the user's custom title
+or description with another AI-generated version.
+
+Track whether metadata is:
+
+AI generated
+
+or:
+
+User edited
+
+through an appropriate field such as title_source / metadata_source.
+
+==================================================
+9. CONTINUE CONVERSATION
+==================================================
+
+A conversation from Conversation History can be opened again.
+
+When opened:
+
+- restore all messages
+- restore interpreted Hamlet criteria
+- restore recommendations when appropriate
+- restore conversation ID
+- continue from exactly where the conversation stopped
+- update last_accessed_at
+- increment access_count
+
+The user should be able to continue an old search naturally.
+
+==================================================
+10. CONTINUE LAST CONVERSATION
+==================================================
+
+Near the Hamlet AI controls, add:
+
+Continue Last Conversation
+
+This provides a shortcut to the most recently active conversation.
+
+Clicking it should restore the latest conversation directly without requiring
+the user to open Conversation History first.
+
+If the current conversation is already the latest active conversation, avoid
+creating duplicate state.
+
+==================================================
+11. START NEW CONVERSATION
+==================================================
+
+Provide a clear:
+
+New Conversation
+
+action.
+
+Starting a new conversation must NOT delete the previous conversation.
+
+The previous conversation is already safely stored in Supabase.
+
+New Conversation:
+
+- clears the visible Hamlet conversation
+- creates a new conversation context
+- resets interpreted criteria
+- resets current recommendations
+- preserves all previous history
+
+The existing "Clear Conversation" control should be reviewed.
+
+Prefer renaming/replacing it with:
+
+New Conversation
+
+because conversations are now automatically persisted.
+
+Do not make "Clear" imply that historical data is being deleted.
+
+==================================================
+12. FUTURE PERSONAL KNOWLEDGE COMPATIBILITY
+==================================================
+
+Conversation history is intentionally being created as future Personal
+Knowledge data for Hamlet.
+
+DO NOT implement RAG in this version.
+
+DO NOT send the complete conversation database to Gemini.
+
+But preserve structured information that future Hamlet versions can use:
+
+- recurring interests
+- recurring searches
+- search themes
+- recommendation history
+- accepted/rejected recommendations
+- watched actions
+- classification actions
+- conversation frequency
+- access_count
+- last_accessed_at
+- user language/style
+- preferred genres/themes
+- manually renamed conversations
+- AI-generated descriptions
+
+Do not implement embeddings/vector search yet.
+
+Keep the schema compatible with future retrieval/RAG.
+
+==================================================
+13. CONVERSATION VISUAL DESIGN
+==================================================
+
+Improve the current Hamlet chat visual design.
+
+AnimeFinder already contains another guided conversational interface used to
+assist the writing/completion of anime and character information.
+
+Inspect that existing component/style.
+
+Reuse/adapt its visual language for Hamlet.
+
+Desired interaction:
+
+HAMLET
+left aligned
+dark/purple-toned bubble
+
+USER
+right aligned
+visually distinct purple bubble
+
+There should be a subtle but clear difference between speakers.
+
+The interaction should feel like a polished modern messaging application.
+
+Do NOT literally clone WhatsApp.
+
+Preserve AnimeFinder's dark-purple identity.
+
+==================================================
+14. PDF EXPORT
+==================================================
+
+Every conversation in Conversation History should provide:
+
+Download / Export PDF
+
+When clicked, offer three modes:
+
+1. Conversation only
+2. Conversation + Recommendations
+3. Recommendations only
+
+==================================================
+15. PDF — CONVERSATION ONLY
+==================================================
+
+Generate a polished thematic AnimeFinder PDF.
+
+Include:
+
+- conversation title
+- conversation description
+- created date
+- last accessed date
+- complete conversation transcript
+
+Preserve the chat experience visually.
+
+Hamlet messages:
+left side
+
+User messages:
+right side
+
+Use visually distinct message bubbles.
+
+Do NOT generate a plain text dump.
+
+The exported PDF should visually resemble the conversation experience inside
+AnimeFinder.
+
+==================================================
+16. PDF — CONVERSATION + RECOMMENDATIONS
+==================================================
+
+First show:
+
+- title
+- description
+- conversation transcript
+
+Then create:
+
+Recommendations
+
+Show the recommended anime using compact professional cards.
+
+Include when available:
+
+- poster
+- title
+- score
+- year
+- format
+- episodes
+- relevant recommendation information
+
+Avoid huge cards.
+
+==================================================
+17. PDF — RECOMMENDATIONS ONLY
+==================================================
+
+Generate a clean AnimeFinder recommendation report containing only the anime
+recommendations.
+
+Use compact cards/grid.
+
+Include:
+
+- conversation/search title
+- description when useful
+- generation/export date
+
+==================================================
+18. GLOBAL ANIMEFINDER PDF FOOTER STANDARD
+==================================================
+
+IMPORTANT GLOBAL REQUIREMENT.
+
+All PDFs generated anywhere in AnimeFinder should follow the same footer
+standard.
+
+EVERY PAGE must contain a discreet footer:
+
+AnimeFinder created by Leonardo Camargo Rossato / LCR Portfolio
+
+"Leonardo Camargo Rossato" should link to Leonardo's portfolio.
+
+"LCR Portfolio" should also link to the same portfolio.
+
+Portfolio URL:
+
+https://leonardocamargorossato.github.io/LCR-SolutionsArchitecture-IA-Quantum/#/
+
+If clickable hyperlinks are supported by the PDF implementation, make both
+elements clickable.
+
+Centralize/reuse a common PDF footer helper where practical instead of
+duplicating footer logic across every exporter.
+
+==================================================
+19. PDF DESIGN QUALITY
+==================================================
+
+Inspect the existing Master Data PDF/export infrastructure.
+
+Reuse useful infrastructure where appropriate.
+
+However, Hamlet PDFs should preserve their own conversational visual identity.
+
+Priorities:
+
+- professional
+- clean
+- compact
+- AnimeFinder dark-purple branding
+- good typography
+- correct page breaking
+- no clipped cards
+- no overlapping elements
+- no broken message bubbles
+- consistent margins
+- footer on every page
+
+==================================================
+20. PRESERVE HAMLET V1.1 MODEL ARCHITECTURE
+==================================================
+
+Do NOT remove or regress V1.1.
+
+Preserve:
+
+- Gemini 3.5 Flash-Lite default
+- automatic Gemini fallback chain
+- timeout protection
+- actual responding model indicator
+- Gemini model selector
+- future GPT/Claude placeholders
+- server-side model attempt logging
+
+When storing messages, preserve the model that actually generated each Hamlet
+response when useful.
+
+Example:
+
+model_used = gemini-3.5-flash-lite
+
+or the fallback model that actually answered.
+
+==================================================
+21. PERFORMANCE
+==================================================
+
+Performance is non-negotiable.
+
+Do NOT reload the entire conversation database after every message.
+
+Do NOT duplicate poster images in Supabase.
+
+Do NOT store giant redundant Jikan payloads when identifiers are sufficient.
+
+Use efficient indexes and queries.
+
+Use lazy loading/pagination for Conversation History if needed.
+
+Automatic persistence must not make Hamlet noticeably slower.
+
+Do not make unnecessary Gemini calls merely to maintain conversation metadata.
+
+==================================================
+22. DATABASE MIGRATION
+==================================================
+
+Create proper Supabase migration file(s) for:
+
+- conversation tables
+- message tables
+- recommendation relationships
+- indexes
+- foreign keys
+- RLS policies
+- metadata fields
+
+Do NOT require Leonardo to manually create tables through the Supabase Dashboard.
+
+Document the exact migration/deployment commands required after implementation.
+
+Do not expose service-role keys or Gemini keys to the browser.
+
+==================================================
+23. TARGET USER EXPERIENCE
+==================================================
+
+The final experience should be:
+
+Start Hamlet
+→ conversation is automatically persisted
+→ Hamlet understands the search
+→ criteria evolve
+→ real recommendations appear
+→ recommendation cards are compact
+→ user opens anime details
+→ returns without losing anything
+→ marks already-watched anime
+→ sends it to Needs Classification if necessary
+→ AI automatically gives the conversation a title and description
+→ user can start another conversation safely
+→ Conversation History contains previous searches
+→ user can edit title/description
+→ user can reopen and continue any conversation
+→ access metadata is updated
+→ user can export conversation/recommendations as polished PDFs
+→ future Hamlet versions can use this history as Personal Knowledge
+
+==================================================
+24. DELIVERABLE
+==================================================
+
+Implement the complete V1.2.
+
+At the end report clearly:
+
+1. Files changed
+2. Supabase tables created
+3. RLS policies created
+4. How automatic conversation persistence works
+5. When the AI-generated title and description are created
+6. How manual title/description editing works
+7. How user-edited metadata is protected from future AI overwrite
+8. How Continue Last Conversation works
+9. How Conversation History works
+10. How New Conversation works
+11. How access_count and last_accessed_at work
+12. How watched → Needs Classification works
+13. How recommendation cards were compacted
+14. How the three PDF export modes work
+15. How the global PDF footer standard was implemented
+16. How V1.1 Gemini fallback/model selector was preserved
+17. Exact Supabase migration command(s)
+18. Whether the Edge Function must be redeployed
+19. Exact deployment command(s)
+20. Any manual action Leonardo still needs to perform
+
+Also update/create the technical documentation for Hamlet V1.2.
