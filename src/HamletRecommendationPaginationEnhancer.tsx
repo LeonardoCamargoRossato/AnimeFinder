@@ -60,7 +60,7 @@ export default function HamletRecommendationPaginationEnhancer() {
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [page, setPage] = useState(1)
   const [count, setCount] = useState(0)
-  const [revision, setRevision] = useState(0)
+  const [signature, setSignature] = useState('')
 
   useEffect(() => {
     const root = document.getElementById('root')
@@ -73,6 +73,7 @@ export default function HamletRecommendationPaginationEnhancer() {
         setGrid(null)
         setHost(null)
         setCount(0)
+        setSignature('')
         setPage(1)
         return
       }
@@ -85,12 +86,14 @@ export default function HamletRecommendationPaginationEnhancer() {
         nextHost.className = 'hamlet-pagination-host'
         nextGrid.after(nextHost)
       }
-      const nextCount = nextGrid.querySelectorAll('.hamlet-compact-card').length
+      const cards = Array.from(nextGrid.querySelectorAll<HTMLElement>('.hamlet-compact-card'))
+      const nextCount = cards.length
+      const nextSignature = cards.slice(0, 3).map((card) => card.querySelector('.hamlet-compact-title')?.textContent?.trim() ?? '').join('|') + `:${nextCount}`
       setGrid((current) => current === nextGrid ? current : nextGrid)
       setHost((current) => current === nextHost ? current : nextHost)
-      setCount(nextCount)
+      setCount((current) => current === nextCount ? current : nextCount)
+      setSignature((current) => current === nextSignature ? current : nextSignature)
       setPage((current) => Math.min(Math.max(1, current), Math.max(1, Math.ceil(nextCount / PAGE_SIZE))))
-      setRevision((value) => value + 1)
     }
     sync()
     const observer = new MutationObserver(sync)
@@ -105,7 +108,7 @@ export default function HamletRecommendationPaginationEnhancer() {
     const end = start + PAGE_SIZE
     cards.forEach((card, index) => { card.style.display = index >= start && index < end ? '' : 'none' })
     grid.scrollTop = 0
-  }, [grid, page, count, revision])
+  }, [grid, page, count, signature])
 
   if (!grid || !host || count === 0) return null
   const meta = getLastHamletSearchMeta()
