@@ -11,6 +11,7 @@ const EMBEDDING_URL = `https://generativelanguage.googleapis.com/v1beta/models/$
 
 type Domain = 'anime' | 'character' | 'preference'
 type QueryRoute = 'structured' | 'statistical' | 'semantic' | 'hybrid' | 'contradiction'
+type ResponseDepth = 'conversational' | 'analytical' | 'deep'
 
 type KnowledgeDraft = {
   domain: Domain
@@ -299,6 +300,13 @@ function classifyQuestion(question: string): { route: QueryRoute; domains: Domai
   return { route: 'structured', domains: ['preference', 'anime', 'character'] }
 }
 
+function classifyResponseDepth(question: string): ResponseDepth {
+  const q = question.toLocaleLowerCase('pt-BR')
+  if (/an[aá]lise\s+(?:bem\s+)?profunda|analise\s+(?:bem\s+)?profunda|an[aá]lise\s+detalhada|analise\s+detalhada|analise detalhadamente|analise profundamente|analisar detalhadamente|analisar profundamente|em profundidade|deep analysis|analyse deeply|analyze deeply|detailed analysis|in detail/.test(q)) return 'deep'
+  if (/mostr[ea]\s+(?:os\s+)?dados|dados\b|compare|compar|quant[oa]s?\b|quantidade|frequ[eê]ncia|percent|porcent|%|top\s*\d+|\bvs\.?\b|versus|ranking|rank\s*\d+|posi(?:ç|c)[aã]o|estat[ií]st|n[uú]mer|amostra|sample size|how many|show (?:me )?(?:the )?data|frequency/.test(q)) return 'analytical'
+  return 'conversational'
+}
+
 function parseRankGroups(question: string): RankGroup[] {
   const groups: RankGroup[] = []
   const top = Array.from(question.matchAll(/top\s*(\d+)/gi)).map((m) => Number(m[1])).filter((n) => n > 0)
@@ -448,18 +456,24 @@ function extractOutputText(payload: any): string {
   return ''
 }
 
-async function reasonWithGemini(apiKey: string, question: string, recentConversation: any[], route: QueryRoute, evidence: any) {
-  const system = `You are Hamlet AI Self-Knowledge Engine inside AnimeFinder. Hamlet is the product identity; never call yourself Gemini.
-Answer in the user's language. Use ONLY the supplied evidence package; do not invent preferences or catalog facts.
-Ranking is an ordinal PERSONAL RANKING, not a rating. Never conflate it with MAL score or any rating.
-Be evidence-first. Structure the answer with three concise sections named DATA, ANALYSIS, and INTERPRETATION (translated naturally if the user is speaking Portuguese).
-DATA: report concrete counts, percentages, sample sizes, rankings, retrieved comments/keywords, or named examples that are actually present.
-ANALYSIS: explain comparisons/patterns supported by those data. Do not claim statistical correlation or causality from small samples.
-INTERPRETATION: offer cautious personal interpretation. Clearly label uncertainty and say when evidence is insufficient.
-Potential contradictions are hypotheses only; call them possible contradictions and explain the supporting evidence.
-Do not dump the entire database. Prefer a few decisive examples and numbers.`
+function responseStyleInstruction(depth: ResponseDepth) {
+  if (depth === 'deep') return `DEEP ANALYSIS MODE. The user explicitly asked for depth. You may give a longer, structured answer with headings or bullets when they improve clarity. Still prioritize interpretation over raw evidence dumps, and connect every important claim to the supplied personal evidence.`
+  if (depth === 'analytical') return `ANALYTICAL MODE. The user explicitly asked for data, quantities, frequencies, rankings, or a comparison. Give the requested numbers and evidence concisely, with sample sizes when relevant. Small bullets are allowed if they genuinely make a comparison clearer. Do not dump the full evidence package or unrelated metrics.`
+  return `CONVERSATIONAL MODE — THIS IS THE DEFAULT. Answer like a thoughtful conversation, not a report. Usually write 1–3 short paragraphs, generally under about 150 words. Be human, reflective, interpretative, and psychologically insightful only when the evidence supports it. Translate the evidence into meaning instead of exposing the analysis machinery. Do NOT use headings such as DATA, ANALYSIS, INTERPRETATION; do NOT use tables, giant bullet lists, frequency lists, raw documents, sample sizes, percentages, retrieval scores, or catalog totals unless a specific number is genuinely necessary to answer the question. Avoid phrases like "the evidence package says" or mentioning query routes, embeddings, RAG, retrieval, or methodology. You may say "Minha impressão é que...", "Talvez...", "Parece existir um padrão...", or natural equivalents in the user's language. These are hypotheses, not objective psychological facts. When useful, end with one natural invitation to investigate a related pattern, but do not mechanically ask a follow-up after every answer.`
+}
 
-  const input = `QUERY ROUTE: ${route}\n\nRECENT SELF-KNOWLEDGE CONVERSATION:\n${recentConversation.slice(-8).map((row: any) => `${row.role === 'assistant' ? 'HAMLET' : 'USER'}: ${clip(normalizeText(row.content), 1000)}`).join('\n')}\n\nUSER QUESTION:\n${question}\n\nEVIDENCE PACKAGE:\n${clip(JSON.stringify(evidence), 26000)}\n\nAnswer strictly from this evidence.`
+async function reasonWithGemini(apiKey: string, question: string, recentConversation: any[], route: QueryRoute, responseDepth: ResponseDepth, evidence: any) {
+  const system = `You are Hamlet AI Self-Knowledge inside AnimeFinder. Hamlet is the product identity; never call yourself Gemini.
+Core philosophy: THE ENGINE THINKS WITH DATA. HAMLET TALKS THROUGH INTERPRETATIONS.
+Answer in the user's language. Use ONLY the supplied personal evidence package for claims about the user; do not invent preferences, catalog facts, motives, or psychological traits.
+Ranking is an ordinal PERSONAL RANKING, not a rating. Never conflate it with MAL score or any rating.
+The evidence package remains internal reasoning material. Do not expose it wholesale. Your job is to synthesize it into the response experience requested by the user.
+Interpretative hypotheses are welcome when grounded in evidence, but clearly phrase them as impressions, possibilities, or patterns rather than objective facts.
+Potential contradictions are hypotheses only; call them possible contradictions and explain the relevant evidence if the user asks about them.
+Do not claim statistical correlation or causality from small samples.
+${responseStyleInstruction(responseDepth)}`
+
+  const input = `QUERY ROUTE (internal only): ${route}\nRESPONSE DEPTH: ${responseDepth}\n\nRECENT SELF-KNOWLEDGE CONVERSATION:\n${recentConversation.slice(-8).map((row: any) => `${row.role === 'assistant' ? 'HAMLET' : 'USER'}: ${clip(normalizeText(row.content), 1000)}`).join('\n')}\n\nUSER QUESTION:\n${question}\n\nINTERNAL EVIDENCE PACKAGE — use it to reason, do not dump it into the chat:\n${clip(JSON.stringify(evidence), 26000)}\n\nAnswer the user's actual question in the requested response depth.`
 
   let lastStatus = 503
   for (const model of REASONING_MODELS) {
@@ -523,6 +537,7 @@ Deno.serve(async (request) => {
     if (!message) return json({ error: 'Message is required.' }, 400, origin)
     const conversation = safeArray(body?.conversation).slice(-10).map((row: any) => ({ role: row?.role === 'assistant' ? 'assistant' : 'user', content: normalizeText(row?.content).slice(0, 2500) }))
     const classification = classifyQuestion(message)
+    const responseDepth = classifyResponseDepth(message)
     const structuredEvidence = buildStructuredEvidence(message, sync.snapshot)
     const semanticEvidence = await semanticSearch(client, apiKey, message, classification.domains)
     const evidencePackage = {
@@ -542,7 +557,7 @@ Deno.serve(async (request) => {
         embeddingModel: EMBEDDING_MODEL,
       },
     }
-    const result = await reasonWithGemini(apiKey, message, conversation, classification.route, evidencePackage)
+    const result = await reasonWithGemini(apiKey, message, conversation, classification.route, responseDepth, evidencePackage)
     return json({
       reply: result.reply,
       route: classification.route,
