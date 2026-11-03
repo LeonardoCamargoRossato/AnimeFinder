@@ -10,15 +10,21 @@
 .hamlet-context-workspace-host{margin:0 0 24px}
 
 .hamlet-self-knowledge-workspace .hamlet-header{align-items:flex-start}
-.hamlet-self-header-side{display:grid;gap:8px;min-width:250px}
+.hamlet-self-header-side{display:grid;gap:8px;min-width:285px}
 .hamlet-self-conversation-actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
-.hamlet-self-conversation-actions button{font-size:10px;padding:7px 9px;opacity:.62;cursor:not-allowed}
+.hamlet-self-conversation-actions button{font-size:10px;padding:7px 9px}
+.hamlet-self-conversation-actions button:disabled{opacity:.55;cursor:not-allowed}
 .hamlet-self-engine-status{display:grid;gap:4px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--surface) 94%,var(--accent) 6%)}
 .hamlet-self-engine-status strong{font-size:13px;color:var(--text)}
 .hamlet-self-engine-status small{font-size:10px;color:var(--muted);line-height:1.35}
+.hamlet-self-index-status{margin-top:3px;padding-top:6px;border-top:1px solid color-mix(in srgb,var(--accent) 18%,var(--border));font-size:9px;line-height:1.35;color:color-mix(in srgb,var(--accent) 70%,var(--text));font-weight:750}
 .hamlet-self-conversation-only{display:block}
 .hamlet-self-conversation-only .hamlet-conversation-panel{width:100%;min-width:0;border-right:0}
 .hamlet-self-messages{min-height:52vh;max-height:64vh}
+.hamlet-self-message-time{display:block;margin-top:4px;font-size:8px!important;opacity:.58}
+.hamlet-self-evidence-meta{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:8px;padding-top:7px;border-top:1px solid color-mix(in srgb,var(--accent) 18%,transparent)}
+.hamlet-self-evidence-meta span{display:inline-flex;align-items:center;min-height:19px;padding:2px 6px;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--border));border-radius:999px;background:color-mix(in srgb,var(--surface) 88%,var(--accent) 12%);color:var(--muted);font-size:8px;font-weight:750;line-height:1.2}
+.hamlet-self-setup-warning{padding:8px 12px;border-top:1px solid color-mix(in srgb,#f0b24a 34%,var(--border));background:color-mix(in srgb,var(--surface) 94%,#f0b24a 6%);color:color-mix(in srgb,#f0b24a 65%,var(--text));font-size:10px;line-height:1.4}
 .hamlet-self-engine-note{padding:8px 12px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);background:color-mix(in srgb,var(--surface) 96%,var(--accent) 4%)}
 .hamlet-self-knowledge-workspace .hamlet-composer textarea{min-height:66px}
 
@@ -41,4 +47,6 @@
   .hamlet-self-header-side{min-width:0;width:auto}
   .hamlet-self-conversation-actions{justify-content:flex-start}
   .hamlet-self-messages{min-height:48vh;max-height:58vh}
+  .hamlet-self-evidence-meta{gap:4px}
+  .hamlet-self-evidence-meta span{font-size:7.5px}
 }
