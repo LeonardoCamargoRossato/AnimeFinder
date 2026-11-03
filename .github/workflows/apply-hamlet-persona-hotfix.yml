@@ -27,10 +27,11 @@ jobs:
           path = Path('supabase/functions/hamlet-self-knowledge/index.ts')
           text = path.read_text()
 
-          text = text.replace(
-              "type ResponseDepth = 'conversational' | 'analytical' | 'deep'",
-              "type ResponseDepth = 'conversational' | 'analytical' | 'deep'\ntype EvidenceMode = 'general' | 'personal'",
-          )
+          if "type EvidenceMode = 'general' | 'personal'" not in text:
+              text = text.replace(
+                  "type ResponseDepth = 'conversational' | 'analytical' | 'deep'",
+                  "type ResponseDepth = 'conversational' | 'analytical' | 'deep'\ntype EvidenceMode = 'general' | 'personal'",
+              )
 
           marker = "function parseRankGroups(question: string): RankGroup[] {"
           evidence_classifier = r'''function classifyEvidenceMode(question: string, recentConversation: any[]): EvidenceMode {
@@ -57,13 +58,13 @@ jobs:
           async function reasonWithGemini(apiKey: string, question: string, recentConversation: any[], route: QueryRoute, responseDepth: ResponseDepth, evidenceMode: EvidenceMode, evidence: any) {
             const system = `You are Hamlet AI Self-Knowledge inside AnimeFinder. Hamlet is the product identity; never call yourself Gemini.
           Core philosophy: THE ENGINE THINKS WITH DATA. HAMLET TALKS THROUGH INTERPRETATIONS.
-          
+
           HAMLET PERSONA:
           - You are not a database assistant, BI dashboard, or statistical report generator.
           - You are an intelligent conversational companion shaped by the user's anime history: a version of the user's taste that can talk back to them from the outside. Never literally claim to be the user.
           - You may interpret, infer, question, carefully disagree, notice possible contradictions, make grounded hypotheses, use light humor, express uncertainty, and ask reflective follow-ups.
           - If asked something ambiguous such as "Quem é Hamlet?", handle the ambiguity naturally. You know the Shakespearean Hamlet from general knowledge, and you also know that you are Hamlet AI inside AnimeFinder. Do not turn that question into a catalog report.
-          
+
           GENERAL INTELLIGENCE + PERSONAL CONTEXT:
           - RAG and personal evidence are additional context, NOT your entire intelligence.
           - You may use your general knowledge and reasoning for ordinary factual, conceptual, literary, philosophical, or conversational questions.
@@ -74,7 +75,7 @@ jobs:
           - Potential contradictions are hypotheses, not factual errors.
           - Never mention vector similarity, embeddings, pgvector, retrieval scores, internal document counts, query routes, RAG mechanics, or evidence packages during normal conversation unless the user explicitly asks about the implementation.
           - Do not claim statistical correlation or causality from small samples.
-          
+
           Answer in the user's language.
           ${responseStyleInstruction(responseDepth)}`
 
@@ -116,29 +117,6 @@ jobs:
           if count != 1:
               raise SystemExit('Could not replace Hamlet response/persona block')
 
-          old_logic = r'''    const classification = classifyQuestion(message)
-            const responseDepth = classifyResponseDepth(message)
-            const structuredEvidence = buildStructuredEvidence(message, sync.snapshot)
-            const semanticEvidence = await semanticSearch(client, apiKey, message, classification.domains)
-            const evidencePackage = {
-              queryClassification: classification,
-              indexCoverage: {
-                totalDerivedDocuments: sync.totalDerivedDocuments,
-                indexedDocuments: Number(sync.status?.embedded) || 0,
-                pendingEmbeddings: sync.pendingEmbeddings,
-                embeddedThisRequest: sync.embeddedThisRequest,
-              },
-              structuredEvidence,
-              semanticEvidence,
-              methodology: {
-                sourceOfTruth: 'Supabase normalized AnimeFinder data',
-                rankingMeaning: 'personal ordinal ranking; not a rating',
-                semanticDomains: ['anime', 'character', 'preference'],
-                embeddingModel: EMBEDDING_MODEL,
-              },
-            }
-            const result = await reasonWithGemini(apiKey, message, conversation, classification.route, responseDepth, evidencePackage)'''
-
           new_logic = r'''    const classification = classifyQuestion(message)
             const responseDepth = classifyResponseDepth(message)
             const evidenceMode = classifyEvidenceMode(message, conversation)
@@ -173,11 +151,11 @@ jobs:
                   },
                 }
               : { personalEvidenceUsed: false }
-            const result = await reasonWithGemini(apiKey, message, conversation, classification.route, responseDepth, evidenceMode, evidencePackage)'''
-
-          if old_logic not in text:
-              raise SystemExit('Could not find ask evidence block')
-          text = text.replace(old_logic, new_logic)
+            const result = await reasonWithGemini(apiKey, message, conversation, classification.route, responseDepth, evidenceMode, evidencePackage)
+'''
+          start = text.index('    const classification = classifyQuestion(message)')
+          end = text.index('    return json({', start)
+          text = text[:start] + new_logic + text[end:]
 
           path.write_text(text)
           PY
