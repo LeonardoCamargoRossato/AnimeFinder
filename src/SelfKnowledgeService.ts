@@ -38,39 +38,16 @@ async function invokeSelfKnowledge(body: Record<string, unknown>) {
   }
 }
 
+/**
+ * Browser-facing facade for the Self-Knowledge Engine.
+ *
+ * Specialized responsibilities such as semanticSearch, compareRankGroups,
+ * analyzeKeywords, analyzeGenres, analyzeCharacters, analyzeDropped,
+ * findContradictions and getStructuredEvidence live inside the authenticated
+ * Edge Function. Keeping them there prevents the browser from querying
+ * pgvector directly or receiving the full Master Data snapshot.
+ */
 export class SelfKnowledgeService {
-  async semanticSearch() {
-    throw new Error('semanticSearch is server-routed in V1. Use ask() so evidence stays behind the secure Self-Knowledge service.')
-  }
-
-  async compareRankGroups() {
-    throw new Error('compareRankGroups is server-routed in V1. Use ask() so structured evidence stays server-side.')
-  }
-
-  async analyzeKeywords() {
-    throw new Error('analyzeKeywords is server-routed in V1. Use ask() so structured evidence stays server-side.')
-  }
-
-  async analyzeGenres() {
-    throw new Error('analyzeGenres is server-routed in V1. Use ask() so structured evidence stays server-side.')
-  }
-
-  async analyzeCharacters() {
-    throw new Error('analyzeCharacters is server-routed in V1. Use ask() so structured evidence stays server-side.')
-  }
-
-  async analyzeDropped() {
-    throw new Error('analyzeDropped is server-routed in V1. Use ask() so structured evidence stays server-side.')
-  }
-
-  async findContradictions() {
-    throw new Error('findContradictions is server-routed in V1. Use ask() so evidence stays server-side.')
-  }
-
-  async getStructuredEvidence() {
-    throw new Error('getStructuredEvidence is server-routed in V1. Use ask() so Master Data is never copied wholesale to the browser.')
-  }
-
   async ask(message: string, conversation: SelfKnowledgeConversationMessage[]): Promise<SelfKnowledgeAnswer> {
     const row = await invokeSelfKnowledge({
       operation: 'ask',
