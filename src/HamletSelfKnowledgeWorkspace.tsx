@@ -25,18 +25,6 @@ function formatTimestamp(value: string) {
   }).format(date)
 }
 
-function routeLabel(route?: SelfKnowledgeConversationMessage['route']) {
-  if (!route) return ''
-  const labels = {
-    structured: 'Structured data',
-    statistical: 'Statistical analysis',
-    semantic: 'Semantic retrieval',
-    hybrid: 'Hybrid analysis',
-    contradiction: 'Possible contradiction analysis',
-  }
-  return labels[route]
-}
-
 function coverageFromSync(status: SelfKnowledgeSyncStatus | null): SelfKnowledgeIndexCoverage | null {
   if (!status) return null
   return {
@@ -134,7 +122,7 @@ export default function HamletSelfKnowledgeWorkspace() {
           <span className="eyebrow">✨ HAMLET AI</span>
           <div data-hamlet-mode-selector-host className="hamlet-dual-mode-selector-host" />
           <h2>Self-Knowledge</h2>
-          <p>Investigate your preferences using structured data, statistics, semantic retrieval, and evidence-based reasoning.</p>
+          <p>Talk with Hamlet about what your anime choices, characters, comments, and rankings may reveal about your preferences.</p>
         </div>
 
         <div className="hamlet-self-header-side">
@@ -144,14 +132,14 @@ export default function HamletSelfKnowledgeWorkspace() {
           </div>
           <div className="hamlet-self-engine-status" aria-label="Hamlet AI Self-Knowledge Engine status">
             <span className="hamlet-model-label">Hamlet AI Self-Knowledge Engine</span>
-            <strong>Hybrid Analysis V1</strong>
-            <small>Structured Data + Statistical Analysis + Semantic Retrieval + RAG</small>
+            <strong>Personal knowledge ready</strong>
+            <small>Hamlet uses your catalog as evidence and turns it into conversational interpretations.</small>
             <span className="hamlet-self-index-status">
               {syncing
-                ? 'Preparing personal knowledge index…'
+                ? 'Preparing personal knowledge…'
                 : total
-                  ? `${indexed}/${total} knowledge documents indexed${pending ? ` · ${pending} pending` : ' · up to date'}`
-                  : 'Structured analysis ready · semantic index pending setup'}
+                  ? `${indexed}/${total} knowledge documents ready${pending ? ` · ${pending} still preparing` : ''}`
+                  : 'Personal knowledge is ready for structured analysis'}
             </span>
           </div>
         </div>
@@ -170,21 +158,12 @@ export default function HamletSelfKnowledgeWorkspace() {
                 <span>{message.role === 'assistant' ? 'Hamlet' : 'You'}</span>
                 <p>{message.content}</p>
                 <small className="hamlet-self-message-time">{formatTimestamp(message.createdAt)}</small>
-                {message.role === 'assistant' && message.route && message.evidenceSummary && (
-                  <div className="hamlet-self-evidence-meta" aria-label="Evidence used by Hamlet">
-                    <span>{routeLabel(message.route)}</span>
-                    <span>{message.evidenceSummary.totalWorks} works</span>
-                    {message.evidenceSummary.semanticMatches > 0 && <span>{message.evidenceSummary.semanticMatches} semantic matches</span>}
-                    {message.evidenceSummary.rankGroups.map((group) => <span key={`${message.id}-${group.label}`}>{group.label}: n={group.sampleSize}</span>)}
-                    {message.evidenceSummary.possibleContradictions > 0 && <span>{message.evidenceSummary.possibleContradictions} possible contradictions</span>}
-                  </div>
-                )}
               </div>
             ))}
             {thinking && (
               <div className="hamlet-message assistant thinking">
                 <span>Hamlet</span>
-                <p>Building an evidence package<span className="hamlet-dots">...</span></p>
+                <p>Thinking about what your catalog suggests<span className="hamlet-dots">...</span></p>
               </div>
             )}
           </div>
@@ -192,7 +171,7 @@ export default function HamletSelfKnowledgeWorkspace() {
           {syncWarning && <div className="hamlet-self-setup-warning">⚠ {syncWarning}</div>}
           {error && <div className="notice error hamlet-error">{error}</div>}
           <div className="hamlet-self-engine-note">
-            Supabase remains the source of truth. Embeddings are a derived retrieval layer and are updated only when their source content changes.
+            Your catalog remains the source of truth. Hamlet uses it as evidence without turning every answer into a report.
           </div>
 
           <form className="hamlet-composer" onSubmit={(event) => void submit(event)}>
@@ -205,7 +184,7 @@ export default function HamletSelfKnowledgeWorkspace() {
                   void submit()
                 }
               }}
-              placeholder="Ask about your anime preferences, rankings, characters, or patterns…"
+              placeholder="Ask what seems to matter to you in anime, characters, themes, or stories…"
               rows={2}
               aria-label="Message Hamlet Self-Knowledge"
             />
