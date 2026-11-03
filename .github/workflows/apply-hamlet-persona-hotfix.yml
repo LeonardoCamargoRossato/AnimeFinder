@@ -1,0 +1,194 @@
+name: Apply Hamlet Self-Knowledge persona hotfix
+
+on:
+  push:
+    paths:
+      - .github/workflows/apply-hamlet-persona-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply conversational persona patch
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('supabase/functions/hamlet-self-knowledge/index.ts')
+          text = path.read_text()
+
+          text = text.replace(
+              "type ResponseDepth = 'conversational' | 'analytical' | 'deep'",
+              "type ResponseDepth = 'conversational' | 'analytical' | 'deep'\ntype EvidenceMode = 'general' | 'personal'",
+          )
+
+          marker = "function parseRankGroups(question: string): RankGroup[] {"
+          evidence_classifier = r'''function classifyEvidenceMode(question: string, recentConversation: any[]): EvidenceMode {
+            const q = question.toLocaleLowerCase('pt-BR').trim()
+            const explicitPersonal = /\b(meu|minha|meus|minhas|mim|eu|gosto|gostar|prefiro|prefer[eê]ncia|valorizo|ranking|rank|top\s*\d+|favorit|abandonei|abandono|me irrita|me prende|meus?\s+anime|meus?\s+personag|minhas?\s+obra|meu\s+cat[aá]logo)\b/i.test(q)
+            const clearGeneralIdentity = /^(quem\s+(?:é|e)\s+hamlet|who\s+is\s+hamlet|what\s+is\s+hamlet|quem\s+(?:é|e)\s+voc[eê]|who\s+are\s+you)\s*[?!.]*$/i.test(q)
+            const conversationalFollowUp = /^(por\s+que|porque|como\s+assim|explique|explica|isso|essa\s+leitura|essa\s+ideia|o\s+que\s+te\s+faz|ser[aá]\s+que|acho\s+que|n[aã]o\s+exatamente|talvez)/i.test(q)
+            if (clearGeneralIdentity && !explicitPersonal) return 'general'
+            if (explicitPersonal) return 'personal'
+            if (conversationalFollowUp && recentConversation.length > 1) return 'personal'
+            return 'general'
+          }
+
+          '''
+          if 'function classifyEvidenceMode(' not in text:
+              text = text.replace(marker, evidence_classifier + marker)
+
+          replacement = r'''function responseStyleInstruction(depth: ResponseDepth) {
+            if (depth === 'deep') return `DEEP ANALYSIS MODE. The user explicitly requested a deep or detailed analysis. You may give a longer structured answer when structure genuinely helps. Keep Hamlet's conversational voice, distinguish evidence from inference naturally, and do not expose retrieval implementation.`
+            if (depth === 'analytical') return `ANALYTICAL MODE. The user explicitly asked for data, quantities, frequencies, rankings, statistics, or a comparison. Give the requested evidence clearly and concisely, including sample sizes when relevant. Small bullets are fine when they improve a comparison. Do not dump unrelated metrics or raw retrieved documents.`
+            return `CONVERSATIONAL MODE — DEFAULT. Prefer roughly 60–180 words, normally 1–3 short paragraphs. Sound like a thoughtful companion, not a report. No report headings, tables, giant lists, raw evidence blocks, sample sizes, percentages, catalog totals, or technical retrieval language unless a number is genuinely necessary for the answer. Translate evidence into meaning. You may use light humor and natural phrases such as "Minha impressão é que...", "Talvez...", "Parece existir um padrão...", or "Posso estar lendo você errado, mas...". A reflective follow-up question is welcome when it naturally advances the conversation, but do not append one mechanically.`
+          }
+
+          async function reasonWithGemini(apiKey: string, question: string, recentConversation: any[], route: QueryRoute, responseDepth: ResponseDepth, evidenceMode: EvidenceMode, evidence: any) {
+            const system = `You are Hamlet AI Self-Knowledge inside AnimeFinder. Hamlet is the product identity; never call yourself Gemini.
+          Core philosophy: THE ENGINE THINKS WITH DATA. HAMLET TALKS THROUGH INTERPRETATIONS.
+          
+          HAMLET PERSONA:
+          - You are not a database assistant, BI dashboard, or statistical report generator.
+          - You are an intelligent conversational companion shaped by the user's anime history: a version of the user's taste that can talk back to them from the outside. Never literally claim to be the user.
+          - You may interpret, infer, question, carefully disagree, notice possible contradictions, make grounded hypotheses, use light humor, express uncertainty, and ask reflective follow-ups.
+          - If asked something ambiguous such as "Quem é Hamlet?", handle the ambiguity naturally. You know the Shakespearean Hamlet from general knowledge, and you also know that you are Hamlet AI inside AnimeFinder. Do not turn that question into a catalog report.
+          
+          GENERAL INTELLIGENCE + PERSONAL CONTEXT:
+          - RAG and personal evidence are additional context, NOT your entire intelligence.
+          - You may use your general knowledge and reasoning for ordinary factual, conceptual, literary, philosophical, or conversational questions.
+          - Claims about THIS USER's preferences, rankings, catalog, motives, psychological patterns, or anime history must be grounded in supplied personal evidence and/or explicit statements the user made in the recent conversation.
+          - The user's corrections in the recent conversation are first-class context. If the user says, for example, that competence matters more than intelligence, reconsider the prior interpretation around that distinction. Do not pretend this correction was permanently stored unless the system explicitly provides permanent memory.
+          - Ranking is an ordinal PERSONAL RANKING, not a rating. Never conflate it with MAL score or another rating.
+          - Interpretative hypotheses do not need absolute statistical proof, but uncertainty must be natural: distinguish direct evidence from reasonable inference and speculation through wording, not through labels like FACT / INFERENCE / SPECULATION.
+          - Potential contradictions are hypotheses, not factual errors.
+          - Never mention vector similarity, embeddings, pgvector, retrieval scores, internal document counts, query routes, RAG mechanics, or evidence packages during normal conversation unless the user explicitly asks about the implementation.
+          - Do not claim statistical correlation or causality from small samples.
+          
+          Answer in the user's language.
+          ${responseStyleInstruction(responseDepth)}`
+
+            const conversationText = recentConversation.slice(-10).map((row: any) => `${row.role === 'assistant' ? 'HAMLET' : 'USER'}: ${clip(normalizeText(row.content), 1200)}`).join('\n')
+            const evidenceText = evidenceMode === 'personal'
+              ? `INTERNAL PERSONAL EVIDENCE — reason from it, but translate it into natural conversation and do not dump it:\n${clip(JSON.stringify(evidence), 26000)}`
+              : `PERSONAL RETRIEVAL IS NOT NEEDED FOR THIS TURN. Answer using general knowledge, reasoning, Hamlet's product identity, and the recent conversation. Do not invent claims about the user's personal catalog or preferences.`
+            const input = `QUERY ROUTE (internal only): ${route}\nRESPONSE DEPTH: ${responseDepth}\nEVIDENCE MODE: ${evidenceMode}\n\nRECENT SELF-KNOWLEDGE CONVERSATION:\n${conversationText}\n\nUSER QUESTION:\n${question}\n\n${evidenceText}\n\nAnswer the user's actual question naturally.`
+
+            let lastStatus = 503
+            for (const model of REASONING_MODELS) {
+              const response = await fetch(GEMINI_INTERACTIONS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                body: JSON.stringify({ model, system_instruction: system, input, response_format: { type: 'text' } }),
+              }).catch(() => null)
+              if (!response) continue
+              lastStatus = response.status
+              const payload = await response.json().catch(() => null)
+              if (!response.ok) {
+                if ([408, 429, 500, 502, 503, 504].includes(response.status)) continue
+                throw new Error(`Reasoning provider failed (${response.status}).`)
+              }
+              const reply = extractOutputText(payload).trim()
+              if (reply) return { reply, model: typeof payload?.model === 'string' ? payload.model : model }
+            }
+            throw new Error(`Hamlet reasoning is temporarily unavailable (${lastStatus}).`)
+          }
+
+          Deno.serve'''
+
+          text, count = re.subn(
+              r"function responseStyleInstruction\(depth: ResponseDepth\) \{.*?\n\}\n\nasync function reasonWithGemini\(.*?\n\}\n\nDeno\.serve",
+              replacement,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit('Could not replace Hamlet response/persona block')
+
+          old_logic = r'''    const classification = classifyQuestion(message)
+            const responseDepth = classifyResponseDepth(message)
+            const structuredEvidence = buildStructuredEvidence(message, sync.snapshot)
+            const semanticEvidence = await semanticSearch(client, apiKey, message, classification.domains)
+            const evidencePackage = {
+              queryClassification: classification,
+              indexCoverage: {
+                totalDerivedDocuments: sync.totalDerivedDocuments,
+                indexedDocuments: Number(sync.status?.embedded) || 0,
+                pendingEmbeddings: sync.pendingEmbeddings,
+                embeddedThisRequest: sync.embeddedThisRequest,
+              },
+              structuredEvidence,
+              semanticEvidence,
+              methodology: {
+                sourceOfTruth: 'Supabase normalized AnimeFinder data',
+                rankingMeaning: 'personal ordinal ranking; not a rating',
+                semanticDomains: ['anime', 'character', 'preference'],
+                embeddingModel: EMBEDDING_MODEL,
+              },
+            }
+            const result = await reasonWithGemini(apiKey, message, conversation, classification.route, responseDepth, evidencePackage)'''
+
+          new_logic = r'''    const classification = classifyQuestion(message)
+            const responseDepth = classifyResponseDepth(message)
+            const evidenceMode = classifyEvidenceMode(message, conversation)
+            const structuredEvidence = evidenceMode === 'personal'
+              ? buildStructuredEvidence(message, sync.snapshot)
+              : {
+                  catalog: { totalWorks: 0, rankedWorks: 0, watchedWorks: 0, droppedOrUnfinishedWorks: 0, topRankedExamples: [] },
+                  rankGroups: [],
+                  droppedComparison: undefined,
+                  favoriteCharacters: undefined,
+                  possibleContradictions: undefined,
+                }
+            const semanticEvidence = evidenceMode === 'personal'
+              ? await semanticSearch(client, apiKey, message, classification.domains)
+              : []
+            const evidencePackage = evidenceMode === 'personal'
+              ? {
+                  queryClassification: classification,
+                  indexCoverage: {
+                    totalDerivedDocuments: sync.totalDerivedDocuments,
+                    indexedDocuments: Number(sync.status?.embedded) || 0,
+                    pendingEmbeddings: sync.pendingEmbeddings,
+                    embeddedThisRequest: sync.embeddedThisRequest,
+                  },
+                  structuredEvidence,
+                  semanticEvidence,
+                  methodology: {
+                    sourceOfTruth: 'Supabase normalized AnimeFinder data',
+                    rankingMeaning: 'personal ordinal ranking; not a rating',
+                    semanticDomains: ['anime', 'character', 'preference'],
+                    embeddingModel: EMBEDDING_MODEL,
+                  },
+                }
+              : { personalEvidenceUsed: false }
+            const result = await reasonWithGemini(apiKey, message, conversation, classification.route, responseDepth, evidenceMode, evidencePackage)'''
+
+          if old_logic not in text:
+              raise SystemExit('Could not find ask evidence block')
+          text = text.replace(old_logic, new_logic)
+
+          path.write_text(text)
+          PY
+
+      - name: Remove one-time workflow
+        run: rm .github/workflows/apply-hamlet-persona-hotfix.yml
+
+      - name: Commit hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/functions/hamlet-self-knowledge/index.ts .github/workflows/apply-hamlet-persona-hotfix.yml
+          git commit -m "Refine Hamlet Self-Knowledge persona and inference"
+          git push
